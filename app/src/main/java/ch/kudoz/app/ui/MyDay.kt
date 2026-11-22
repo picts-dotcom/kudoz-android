@@ -30,6 +30,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -82,60 +84,65 @@ fun MyDayScreen(onOpenCard: (MyCard) -> Unit, onError: (Throwable) -> Unit) {
             modifier = Modifier.padding(horizontal = 18.dp),
         )
         Spacer(Modifier.height(8.dp))
+        val pager = rememberPagerState(initialPage = buckets.indexOf(Bucket.TODAY).coerceAtLeast(0)) { buckets.size }
+        LaunchedEffect(pager.currentPage) { buckets.getOrNull(pager.currentPage)?.let { tab = it } }
         PillTabs(
             buckets.map { b -> "${b.label}  ${grouped[b]?.size ?: 0}" },
-            buckets.indexOf(tab).coerceAtLeast(0),
-            { i -> tab = buckets[i] },
+            pager.currentPage,
+            { i -> scope.launch { pager.animateScrollToPage(i) } },
         )
         if (cards == null) { SplashScreen(); return@Column }
-        PullToRefreshBox(
-            isRefreshing = refreshing,
-            onRefresh = { scope.launch { refreshing = true; reload(); refreshing = false } },
-        ) {
-            val list = (grouped[tab] ?: emptyList()).sortedWith(compareBy({ it.dueDate ?: "9999" }, { it.title }))
-            LazyColumn(
-                Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+            val pageBucket = buckets[page]
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; reload(); refreshing = false } },
             ) {
-                if (tab == Bucket.TODAY && list.size > MyDayLogic.TODAY_SOFT_LIMIT) item {
-                    Surface(color = paletteColors("lemon").first, shape = RoundedCornerShape(14.dp)) {
-                        Text(
-                            "Viel für einen Tag: ${list.size} Aufgaben. Schieb ein paar auf morgen oder diese Woche.",
-                            Modifier.padding(12.dp), color = paletteColors("lemon").second,
-                        )
+                    val list = (grouped[pageBucket] ?: emptyList()).sortedWith(compareBy({ it.dueDate ?: "9999" }, { it.title }))
+                    LazyColumn(
+                        Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (pageBucket == Bucket.TODAY && list.size > MyDayLogic.TODAY_SOFT_LIMIT) item {
+                            Surface(color = paletteColors("lemon").first, shape = RoundedCornerShape(14.dp)) {
+                                Text(
+                                    "Viel für einen Tag: ${list.size} Aufgaben. Schieb ein paar auf morgen oder diese Woche.",
+                                    Modifier.padding(12.dp), color = paletteColors("lemon").second,
+                                )
+                            }
+                        }
+                        if (list.isEmpty()) item {
+                            EmptyHint(
+                                when (pageBucket) {
+                                    Bucket.TODAY -> "Heute ist nichts geplant. 🎉\nHol dir etwas aus «Unverplant»."
+                                    Bucket.UNPLANNED -> "Alles verplant – stark!"
+                                    else -> "Hier ist noch nichts geplant."
+                                },
+                            )
+                        }
+                        items(list, key = { it.id }) { c ->
+                            MyDayRow(
+                                card = c,
+                                plan = planByCard[c.id],
+                                current = pageBucket,
+                                buckets = buckets,
+                                onOpen = { onOpenCard(c) },
+                                onPick = { b ->
+                                    scope.launch {
+                                        runCatching { Repo.savePlan(c.id, planByCard[c.id], MyDayLogic.targetFor(b, MyDayLogic.today())) }.onFailure(onError)
+                                        reload()
+                                    }
+                                },
+                                onDone = {
+                                    scope.launch {
+                                        runCatching { Repo.setDone(c.id, true) }.onFailure(onError)
+                                        reload()
+                                    }
+                                },
+                            )
+                        }
                     }
-                }
-                if (list.isEmpty()) item {
-                    EmptyHint(
-                        when (tab) {
-                            Bucket.TODAY -> "Heute ist nichts geplant. 🎉\nHol dir etwas aus «Unverplant»."
-                            Bucket.UNPLANNED -> "Alles verplant – stark!"
-                            else -> "Hier ist noch nichts geplant."
-                        },
-                    )
-                }
-                items(list, key = { it.id }) { c ->
-                    MyDayRow(
-                        card = c,
-                        plan = planByCard[c.id],
-                        current = tab,
-                        buckets = buckets,
-                        onOpen = { onOpenCard(c) },
-                        onPick = { b ->
-                            scope.launch {
-                                runCatching { Repo.savePlan(c.id, planByCard[c.id], MyDayLogic.targetFor(b, MyDayLogic.today())) }.onFailure(onError)
-                                reload()
-                            }
-                        },
-                        onDone = {
-                            scope.launch {
-                                runCatching { Repo.setDone(c.id, true) }.onFailure(onError)
-                                reload()
-                            }
-                        },
-                    )
-                }
             }
         }
     }
