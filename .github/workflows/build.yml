@@ -38,6 +38,8 @@ jobs:
         with:
           name: kudoz-apk-${{ github.run_number }}
           path: kudoz-${{ github.run_number }}.apk
+          # Kurz aufbewahren: Artefakte zählen zum Gratis-Speicher (500 MB), Release-Dateien nicht.
+          retention-days: 3
       - name: Als Release veröffentlichen
         uses: softprops/action-gh-release@v2
         with:
