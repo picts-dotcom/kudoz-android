@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Sailing
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -76,6 +77,10 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
     var waitingPrompt by remember { mutableStateOf(false) }
     var plan by remember { mutableStateOf<Plan?>(null) }
     var sending by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
+    var bountyKind by remember { mutableStateOf<String?>(null) }
+    var commentEdit by remember { mutableStateOf<Comment?>(null) }
     var sentTo by remember { mutableStateOf<String?>(null) }
     var planMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -100,6 +105,7 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
             title = { Text(project.name, fontSize = 16.sp) },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
             actions = {
+                if (card != null) IconButton(onClick = { editing = true }) { Icon(Icons.Default.Edit, "Bearbeiten") }
                 if (card != null) IconButton(onClick = { sending = true }) { Icon(Icons.Default.Sailing, "An andere Umgebung senden") }
             },
         )
@@ -158,7 +164,10 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
                 }
             }
             item {
-                Text("Verantwortlich", fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Verantwortlich", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { picking = true }) { Text("Ändern") }
+                }
                 Spacer(Modifier.height(6.dp))
                 if (c.assignees.isEmpty()) Text("Noch niemand", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 c.assignees.forEach { a ->
@@ -181,6 +190,10 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
                         Icon(Icons.Default.Check, null); Spacer(Modifier.width(6.dp))
                         Text(if (c.done) "Wieder öffnen" else "Erledigt")
                     }
+                }
+                Row {
+                    TextButton(onClick = { bountyKind = "bounty" }) { Text("🪙 Als Bounty") }
+                    TextButton(onClick = { bountyKind = "hilfe" }) { Text("🤝 Hilfe suchen") }
                 }
                 TextButton(onClick = {
                     if (c.waitingText != null) act { Repo.setWaiting(c.id, "") } else waitingPrompt = true
@@ -223,6 +236,10 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
                         }
                         Text(cm.body)
                     }
+                    if (cm.authorId == me) {
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { commentEdit = cm }) { Icon(Icons.Default.Edit, "Kommentar bearbeiten", Modifier.padding(2.dp)) }
+                    }
                 }
             }
         }
@@ -241,6 +258,15 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
             newItem = false
             act { Repo.addChecklistItem(c, body, (checklist.maxOfOrNull { it.position } ?: 0.0) + 1.0) }
         })
+        if (editing) CardEditDialog(c, onDismiss = { editing = false }, onSaved = { editing = false; scope.launch { reload() } }, onError = onError)
+        if (picking) AssigneePicker(c, project.workspaceId, onDismiss = { picking = false }, onChanged = { scope.launch { reload() } }, onError = onError)
+        bountyKind?.let { k ->
+            BountyDialog(project.workspaceId, fixedProject = project, card = c, initialKind = k,
+                onDismiss = { bountyKind = null }, onCreated = { bountyKind = null }, onError = onError)
+        }
+        commentEdit?.let { cm ->
+            CommentEditDialog(cm, onDismiss = { commentEdit = null }, onDone = { commentEdit = null; scope.launch { reload() } }, onError = onError)
+        }
         if (sending) SendTaskDialog(project.workspaceId, c, onDismiss = { sending = false }, onSent = { name ->
             sending = false; sentTo = name; scope.launch { reload() }
         }, onError = onError)
@@ -257,4 +283,26 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
             act { Repo.setWaiting(c.id, t) }
         })
     }
+}
+
+
+@Composable
+private fun CommentEditDialog(comment: Comment, onDismiss: () -> Unit, onDone: () -> Unit, onError: (Throwable) -> Unit) {
+    var text by remember { mutableStateOf(comment.body) }
+    val scope = rememberCoroutineScope()
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Kommentar") },
+        text = { OutlinedTextField(text, { text = it }, modifier = Modifier.fillMaxWidth()) },
+        confirmButton = {
+            TextButton(enabled = text.isNotBlank(), onClick = {
+                scope.launch { runCatching { Repo.editComment(comment.id, text) }.onSuccess { onDone() }.onFailure(onError) }
+            }) { Text("Speichern") }
+        },
+        dismissButton = {
+            TextButton(onClick = {
+                scope.launch { runCatching { Repo.deleteComment(comment.id) }.onSuccess { onDone() }.onFailure(onError) }
+            }) { Text("Löschen", color = MaterialTheme.colorScheme.error) }
+        },
+    )
 }

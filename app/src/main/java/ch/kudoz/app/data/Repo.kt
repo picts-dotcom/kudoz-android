@@ -324,6 +324,36 @@ object Repo {
         profileCache.remove(uid)
     }
 
+    // ---------- Karten bearbeiten ----------
+
+    suspend fun updateCard(id: String, title: String, description: String?, dueDate: String?) {
+        db.from("cards").update({
+            set("title", title.trim()); set("description", description?.trim()?.ifBlank { null }); set("due_date", dueDate)
+        }) { filter { eq("id", id) } }
+    }
+
+    suspend fun addAssignee(card: Card, userId: String) {
+        db.from("card_assignees").insert(NewAssignee(card.id, userId, card.projectId))
+    }
+
+    suspend fun removeAssignee(card: Card, userId: String) {
+        db.from("card_assignees").delete { filter { eq("card_id", card.id); eq("user_id", userId) } }
+    }
+
+    suspend fun editComment(id: String, body: String) {
+        db.from("card_comments").update({ set("body", body.trim()) }) { filter { eq("id", id) } }
+    }
+
+    suspend fun deleteComment(id: String) {
+        db.from("card_comments").delete { filter { eq("id", id) } }
+    }
+
+    // ---------- Bounties ausschreiben ----------
+
+    suspend fun createBounty(workspaceId: String, projectId: String?, cardId: String?, kind: String, title: String, description: String) {
+        db.from("bounties").insert(NewBounty(workspaceId, projectId, cardId, kind, title = title.trim(), description = description.trim().ifBlank { null }))
+    }
+
     private suspend fun rpc(name: String, args: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) {
         db.postgrest.rpc(name, buildJsonObject(args))
     }

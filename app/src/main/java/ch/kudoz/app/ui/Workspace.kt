@@ -92,90 +92,102 @@ fun BountiesScreen(ws: Workspace, role: String?, onError: (Throwable) -> Unit) {
     val scope = rememberCoroutineScope()
     val me = Repo.userId
     var all by remember { mutableStateOf<List<Bounty>>(emptyList()) }
+    var creating by remember { mutableStateOf(false) }
 
     fun act(block: suspend () -> Unit) = scope.launch { runCatching { block() }.onFailure(onError); version++ }
 
-    LoadingList(
-        load = {
-            Repo.bounties(ws.id).also { list ->
-                all = list
-                people = Repo.profiles(list.flatMap { b -> listOfNotNull(b.claimedBy, b.createdBy) + b.helpers.map { it.userId } }.toSet())
-            }.filter { it.status == filter }
-        },
-        onError = onError,
-        key = "$filter/$version",
-        empty = if (filter == "open") "Gerade ist nichts offen." else "Hier ist noch nichts.",
-        header = {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BOUNTY_FILTERS.forEach { (k, label) ->
-                    FilterChip(
-                        selected = filter == k, onClick = { filter = k },
-                        label = { Text("$label ${all.count { it.status == k }.takeIf { all.isNotEmpty() } ?: ""}") },
-                    )
-                }
-            }
-        },
-    ) { b ->
-        val isBounty = b.kind == "bounty"
-        val mine = b.createdBy == me
-        val helping = b.helpers.any { it.userId == me }
-        val admin = role == "admin"
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            shape = RoundedCornerShape(18.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(Modifier.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isBounty && b.rewardImage != null) RewardImage(b.rewardImage, Modifier.size(52.dp))
-                    else Text(if (isBounty) "🪙" else "🤝", fontSize = 26.sp)
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(b.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text(
-                            (if (isBounty) "Bounty" else "Hilfe gesucht") + " · von ${people[b.createdBy]?.label ?: "…"}",
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    Box(Modifier.fillMaxSize()) {
+        LoadingList(
+            load = {
+                Repo.bounties(ws.id).also { list ->
+                    all = list
+                    people = Repo.profiles(list.flatMap { b -> listOfNotNull(b.claimedBy, b.createdBy) + b.helpers.map { it.userId } }.toSet())
+                }.filter { it.status == filter }
+            },
+            onError = onError,
+            key = "$filter/$version",
+            empty = if (filter == "open") "Gerade ist nichts offen." else "Hier ist noch nichts.",
+            header = {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BOUNTY_FILTERS.forEach { (k, label) ->
+                        FilterChip(
+                            selected = filter == k, onClick = { filter = k },
+                            label = { Text("$label ${all.count { it.status == k }.takeIf { all.isNotEmpty() } ?: ""}") },
                         )
                     }
-                    b.claimedBy?.let { Avatar(people[it], 30) }
-                    if (!isBounty && b.helpers.isNotEmpty()) AvatarStack(b.helpers.map { people[it.userId] })
                 }
-                b.description?.takeIf { it.isNotBlank() }?.let {
-                    Spacer(Modifier.height(6.dp)); Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (isBounty && mine && b.status != "done") {
-                    Spacer(Modifier.height(4.dp))
-                    Text("Eigene Bounty – keine Belohnung für dich.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (b.status == "done") {
-                    Spacer(Modifier.height(4.dp))
-                    Text("Erledigt ✓", fontWeight = FontWeight.Bold, color = paletteColors("mint").second, fontSize = 13.sp)
-                }
-                val actions = buildList<Pair<String, suspend () -> Unit>> {
-                    if (isBounty && b.status == "open") add("Übernehmen" to { Repo.bountyClaim(b.id, true) })
-                    if (!isBounty && b.status != "done") add((if (helping) "Hilfe beenden" else "Ich helfe") to { Repo.bountyClaim(b.id, !helping) })
-                    if (!isBounty && b.status != "done" && (helping || mine || admin)) add("Hilfe abschliessen" to { Repo.bountyComplete(b.id) })
-                    if (isBounty && b.status == "claimed" && (b.claimedBy == me || mine || admin)) {
-                        add("Freigeben" to { Repo.bountyClaim(b.id, false) })
-                        add("Erledigt" to { Repo.bountyComplete(b.id) })
+            },
+        ) { b ->
+            val isBounty = b.kind == "bounty"
+            val mine = b.createdBy == me
+            val helping = b.helpers.any { it.userId == me }
+            val admin = role == "admin"
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isBounty && b.rewardImage != null) RewardImage(b.rewardImage, Modifier.size(52.dp))
+                        else Text(if (isBounty) "🪙" else "🤝", fontSize = 26.sp)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(b.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(
+                                (if (isBounty) "Bounty" else "Hilfe gesucht") + " · von ${people[b.createdBy]?.label ?: "…"}",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        b.claimedBy?.let { Avatar(people[it], 30) }
+                        if (!isBounty && b.helpers.isNotEmpty()) AvatarStack(b.helpers.map { people[it.userId] })
                     }
-                }
-                if (actions.isNotEmpty()) {
-                    Spacer(Modifier.height(10.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        actions.forEachIndexed { i, (label, run) ->
-                            if (i == actions.lastIndex) Button(
-                                onClick = { act(run) },
-                                colors = ButtonDefaults.buttonColors(containerColor = paletteColors("lemon").second),
-                            ) { if (label.startsWith("Erledigt") || label.endsWith("abschliessen")) Icon(Icons.Default.Check, null); Text(label) }
-                            else OutlinedButton(onClick = { act(run) }) { Text(label) }
+                    b.description?.takeIf { it.isNotBlank() }?.let {
+                        Spacer(Modifier.height(6.dp)); Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (isBounty && mine && b.status != "done") {
+                        Spacer(Modifier.height(4.dp))
+                        Text("Eigene Bounty – keine Belohnung für dich.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (b.status == "done") {
+                        Spacer(Modifier.height(4.dp))
+                        Text("Erledigt ✓", fontWeight = FontWeight.Bold, color = paletteColors("mint").second, fontSize = 13.sp)
+                    }
+                    val actions = buildList<Pair<String, suspend () -> Unit>> {
+                        if (isBounty && b.status == "open") add("Übernehmen" to { Repo.bountyClaim(b.id, true) })
+                        if (!isBounty && b.status != "done") add((if (helping) "Hilfe beenden" else "Ich helfe") to { Repo.bountyClaim(b.id, !helping) })
+                        if (!isBounty && b.status != "done" && (helping || mine || admin)) add("Hilfe abschliessen" to { Repo.bountyComplete(b.id) })
+                        if (isBounty && b.status == "claimed" && (b.claimedBy == me || mine || admin)) {
+                            add("Freigeben" to { Repo.bountyClaim(b.id, false) })
+                            add("Erledigt" to { Repo.bountyComplete(b.id) })
+                        }
+                    }
+                    if (actions.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            actions.forEachIndexed { i, (label, run) ->
+                                if (i == actions.lastIndex) Button(
+                                    onClick = { act(run) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = paletteColors("lemon").second),
+                                ) { if (label.startsWith("Erledigt") || label.endsWith("abschliessen")) Icon(Icons.Default.Check, null); Text(label) }
+                                else OutlinedButton(onClick = { act(run) }) { Text(label) }
+                            }
                         }
                     }
                 }
             }
         }
+        ExtendedFloatingActionButton(
+            onClick = { creating = true },
+            icon = { Icon(Icons.Default.Add, null) },
+            text = { Text("Ausschreiben") },
+            containerColor = paletteColors("lemon").second,
+            contentColor = androidx.compose.ui.graphics.Color.White,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+        )
     }
+    if (creating) BountyDialog(ws.id, onDismiss = { creating = false }, onCreated = { creating = false; filter = "open"; version++ }, onError = onError)
 }
 
 // ---------------------------------------------------------------- Shoutouts

@@ -279,3 +279,21 @@ data class FleetBounty(
     @SerialName("reward_image") val rewardImage: Int? = null,
     @SerialName("workspace_id") val workspaceId: String,
 )
+
+@Serializable
+data class NewAssignee(
+    @SerialName("card_id") val cardId: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("project_id") val projectId: String,
+)
+
+@Serializable
+data class NewBounty(
+    @SerialName("workspace_id") val workspaceId: String,
+    @SerialName("project_id") val projectId: String?,
+    @SerialName("card_id") val cardId: String?,
+    val kind: String,
+    @SerialName("reward_source") val rewardSource: String = "random",
+    val title: String,
+    val description: String?,
+)
