@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -66,7 +67,8 @@ private val ARCHIVE_DAYS = listOf(0 to "Nie", 7 to "7 Tage", 14 to "14 Tage", 30
 /** Einstellungen der Umgebung (nur Admin): Name, Farbe, Aufräumen, Rechte von Gästen und Kern. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun WorkspaceSettingsScreen(ws: Workspace, onError: (Throwable) -> Unit) {
+fun WorkspaceSettingsScreen(ws: Workspace, onGone: () -> Unit, onError: (Throwable) -> Unit) {
+    var memberProfiles by remember { mutableStateOf<List<ch.kudoz.app.data.Profile>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var loaded by remember { mutableStateOf(false) }
@@ -83,6 +85,7 @@ fun WorkspaceSettingsScreen(ws: Workspace, onError: (Throwable) -> Unit) {
             name = row.name; color = row.color; days = row.autoArchiveDays
             guest = Repo.permissions("workspace_guest_permissions", ws.id)
             kern = Repo.permissions("workspace_kern_permissions", ws.id)
+            memberProfiles = Repo.profiles(Repo.memberList(ws.id).map { it.userId }).values.sortedBy { it.label.lowercase() }
             loaded = true
         }.onFailure(onError)
     }
@@ -140,14 +143,11 @@ fun WorkspaceSettingsScreen(ws: Workspace, onError: (Throwable) -> Unit) {
             }
         }
         item { HorizontalDivider() }
-        item {
-            Text(
-                "Sichtbarkeit für andere, Beitrittsanfragen, Dienstplan, Symbol und Löschen der Umgebung stellst du im Web ein.",
-                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(onClick = { openWeb(context, "/w/${ws.id}/einstellungen") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                Text("Alle Einstellungen im Web")
-            }
-        }
+        item { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { VisibilityBlock(ws, memberProfiles, onError) } }
+        item { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { JoinRequestsBlock(ws, onError) } }
+        item { HorizontalDivider() }
+        item { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { DutyBlock(ws, onError) } }
+        item { HorizontalDivider() }
+        item { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { IconAndDangerBlock(ws, onGone, onError) } }
     }
 }

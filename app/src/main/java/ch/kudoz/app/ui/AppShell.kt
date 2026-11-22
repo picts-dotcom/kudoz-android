@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Badge
@@ -76,6 +78,9 @@ sealed interface Screen {
     data object Treasury : Screen
     data object Fleet : Screen
     data object Settings : Screen
+    data object Search : Screen
+    data object Directory : Screen
+    data object Superadmin : Screen
     data class Milestones(val ws: Workspace, val project: Project) : Screen
 }
 
@@ -100,7 +105,7 @@ fun AppShell() {
             runCatching {
                 val ws = Repo.workspace(wsId)
                 val pr = Repo.project(projectId)
-                stack.clear(); stack.add(Screen.Workspaces); stack.add(Screen.Projects(ws))
+                stack.clear(); stack.add(Screen.Workspaces); stack.add(Screen.Projects(ws, Repo.myRole(ws.id)))
                 stack.add(Screen.Board(ws, pr))
                 if (!cardId.isNullOrEmpty()) stack.add(Screen.CardDetail(ws, pr, cardId))
                 tab = 1
@@ -116,7 +121,7 @@ fun AppShell() {
             scope.launch {
                 runCatching {
                     val ws = Repo.workspace(w.groupValues[1])
-                    stack.clear(); stack.add(Screen.Workspaces); stack.add(Screen.Projects(ws)); tab = 1
+                    stack.clear(); stack.add(Screen.Workspaces); stack.add(Screen.Projects(ws, Repo.myRole(ws.id))); tab = 1
                 }.onFailure { showError(it) }
             }
             return
@@ -125,6 +130,8 @@ fun AppShell() {
     }
 
     LaunchedEffect(Unit) { runCatching { unread = Repo.notifications().count { it.readAt == null } } }
+    var update by remember { mutableStateOf<ch.kudoz.app.data.Updates.Latest?>(null) }
+    LaunchedEffect(Unit) { update = ch.kudoz.app.data.Updates.check() }
     val pendingLink by Push.pendingLink
     LaunchedEffect(pendingLink) {
         pendingLink?.let { Push.pendingLink.value = null; openLink(if (it.startsWith("/")) it else "/$it") }
@@ -145,7 +152,7 @@ fun AppShell() {
                 TopAppBar(
                     title = {
                         Text(
-                            when (top) { is Screen.Projects -> top.ws.name; Screen.Treasury -> "Schatzkammer"; Screen.Fleet -> "Flotte"; Screen.Settings -> "Einstellungen"; is Screen.Milestones -> "Meilensteine · ${top.project.name}"; else -> "Kudoz" },
+                            when (top) { is Screen.Projects -> top.ws.name; Screen.Treasury -> "Schatzkammer"; Screen.Fleet -> "Flotte"; Screen.Settings -> "Einstellungen"; Screen.Search -> "Suche"; Screen.Directory -> "Andere Schiffe"; Screen.Superadmin -> "Superadmin"; is Screen.Milestones -> "Meilensteine · ${top.project.name}"; else -> "Kudoz" },
                             fontFamily = Fredoka, fontWeight = FontWeight.SemiBold,
                         )
                     },
@@ -158,6 +165,7 @@ fun AppShell() {
                         if (top is Screen.Projects) IconButton(onClick = { openWeb(context, "/w/${top.ws.id}") }) {
                             Icon(Icons.Default.OpenInBrowser, "Im Web öffnen")
                         }
+                        if (top is Screen.Workspaces) IconButton(onClick = { push(Screen.Search) }) { Icon(Icons.Default.Search, "Suchen") }
                         if (top is Screen.Workspaces) IconButton(onClick = { push(Screen.Settings) }) {
                             Icon(Icons.Default.Settings, "Einstellungen")
                         }
@@ -187,14 +195,26 @@ fun AppShell() {
             }
         },
     ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize()) {
+        Column(Modifier.padding(pad).fillMaxSize()) {
+        update?.let { u ->
+            androidx.compose.material3.Surface(color = KudozBountySoft) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("✨ Neue Version ${u.versionName} verfügbar", Modifier.weight(1f), color = KudozBountyInk, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    androidx.compose.material3.TextButton(onClick = {
+                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u.url)))
+                    }) { Text("Holen", color = KudozBountyInk) }
+                    androidx.compose.material3.TextButton(onClick = { update = null }) { Text("✕", color = KudozBountyInk) }
+                }
+            }
+        }
+        Box(Modifier.weight(1f).fillMaxSize()) {
             if (tab == 0) {
                 MyDayScreen(onOpenCard = { c -> c.projects?.let { openCard(it.workspaceId, it.id, c.id) } }, onError = ::showError)
             } else if (tab == 2) {
                 NotificationsScreen(onUnread = { unread = it }, onError = ::showError, onOpenLink = ::openLink)
             } else androidx.compose.runtime.key(top) { when (top) {
-                Screen.Workspaces -> WorkspacesScreen(onOpen = { ws, role -> push(Screen.Projects(ws, role)) }, onTreasury = { push(Screen.Treasury) }, onFleet = { push(Screen.Fleet) }, onError = ::showError)
-                is Screen.Projects -> WorkspaceScreen(top.ws, top.role, onOpenProject = { push(Screen.Board(top.ws, it)) }, onError = ::showError)
+                Screen.Workspaces -> WorkspacesScreen(onOpen = { ws, role -> push(Screen.Projects(ws, role)) }, onTreasury = { push(Screen.Treasury) }, onFleet = { push(Screen.Fleet) }, onDirectory = { push(Screen.Directory) }, onError = ::showError)
+                is Screen.Projects -> WorkspaceScreen(top.ws, top.role, onOpenProject = { push(Screen.Board(top.ws, it)) }, onGone = { stack.clear(); stack.add(Screen.Workspaces) }, onError = ::showError)
                 is Screen.Board -> BoardScreen(
                     top.ws, top.project,
                     onBack = { pop() },
@@ -206,7 +226,10 @@ fun AppShell() {
                 is Screen.CardDetail -> CardDetailScreen(top.ws, top.project, top.cardId, onBack = { pop() }, onOpenCard = { push(Screen.CardDetail(top.ws, top.project, it)) }, onError = ::showError)
                 is Screen.Archive -> ArchiveScreen(top.project, onBack = { pop() }, onError = ::showError)
                 Screen.Treasury -> TreasuryScreen(onError = ::showError)
-                Screen.Settings -> SettingsScreen(onError = ::showError)
+                Screen.Settings -> SettingsScreen(onSuperadmin = { push(Screen.Superadmin) }, onError = ::showError)
+                Screen.Superadmin -> SuperadminScreen(onError = ::showError)
+                Screen.Directory -> DirectoryScreen(onError = ::showError)
+                Screen.Search -> SearchScreen(onOpen = { h, p -> openCard(p.workspaceId, p.id, h.id) }, onError = ::showError)
                 is Screen.Milestones -> MilestonesPanel(top.project, onError = ::showError)
                 Screen.Fleet -> FleetScreen(
                     onOpenCard = { c -> c.projects?.let { openCard(it.workspaceId, it.id, c.id) } },
@@ -214,6 +237,7 @@ fun AppShell() {
                     onError = ::showError,
                 )
             } }
+        }
         }
     }
 }
@@ -270,9 +294,16 @@ fun ColorTile(name: String, color: String, sub: String?, onClick: () -> Unit) {
 private val ROLE = mapOf("admin" to "Admin", "kern" to "Kern", "leitung" to "Leitung", "gast" to "Gast")
 
 @Composable
-fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onTreasury: () -> Unit, onFleet: () -> Unit, onError: (Throwable) -> Unit) {
+fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onTreasury: () -> Unit, onFleet: () -> Unit, onDirectory: () -> Unit, onError: (Throwable) -> Unit) {
+    var invitations by remember { mutableStateOf<List<ch.kudoz.app.data.Invitation>>(emptyList()) }
+    var creating by remember { mutableStateOf(false) }
+    var version by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    fun act(b: suspend () -> Unit) = scope.launch { runCatching { b() }.onFailure(onError); version++ }
+    Box(Modifier.fillMaxSize()) {
     LoadingList(
-        load = { Repo.workspaces() },
+        load = { Repo.ensureCabin(); invitations = Repo.myInvitations(); Repo.workspaces() },
+        key = version,
         onError = onError,
         empty = "Du bist noch in keiner Umgebung. Auf kudoz.ch kannst du eine erstellen oder beitreten.",
         header = {
@@ -280,6 +311,8 @@ fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onTreasury: () -> Unit
                 "Hallo ${Repo.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() } ?: ""} 👋",
                 fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp),
             )
+            InvitationsBlock(invitations, onAccept = { act { Repo.acceptInvitation(it.id) } }, onDecline = { act { Repo.declineInvitation(it.id) } })
+            Spacer(Modifier.height(6.dp))
             ColorTile("Flotte", "ocean", "Alles für dich aus allen Umgebungen") { onFleet() }
             Spacer(Modifier.height(4.dp))
             Text("Umgebungen", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
@@ -288,6 +321,10 @@ fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onTreasury: () -> Unit
             androidx.compose.material3.TextButton(onClick = onTreasury, modifier = Modifier.fillMaxWidth()) {
                 Text("💎 Meine Schatzkammer", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            androidx.compose.material3.TextButton(onClick = onDirectory, modifier = Modifier.fillMaxWidth()) {
+                Text("🧭 Andere Schiffe entdecken", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.height(80.dp))
         },
     ) { (ws, role) ->
         ColorTile(
@@ -295,7 +332,16 @@ fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onTreasury: () -> Unit
             if (ws.privateOwner != null) "Kajüte · privat" else ROLE[role] ?: role,
         ) { onOpen(ws, role) }
     }
+        androidx.compose.material3.ExtendedFloatingActionButton(
+            onClick = { creating = true },
+            icon = { Icon(Icons.Default.Add, null) }, text = { Text("Umgebung") },
+            containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+        )
+    }
+    if (creating) NewWorkspaceDialog(onDismiss = { creating = false }) { name, color -> creating = false; act { Repo.createWorkspace(name, color) } }
 }
+
 
 @Composable
 fun ProjectsScreen(ws: Workspace, onOpen: (Project) -> Unit, onError: (Throwable) -> Unit) {

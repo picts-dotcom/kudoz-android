@@ -185,9 +185,15 @@ fun MembersScreen(ws: Workspace, role: String?, onError: (Throwable) -> Unit) {
     val context = LocalContext.current
     val me = Repo.userId
     val isAdmin = role == "admin"
+    var inviting by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<List<ch.kudoz.app.data.PendingInvite>>(emptyList()) }
+    var guestFor by remember { mutableStateOf<Member?>(null) }
+    var removing by remember { mutableStateOf<Member?>(null) }
+    fun act(b: suspend () -> Unit) = scope.launch { runCatching { b() }.onFailure(onError); version++ }
 
     LoadingList(
         load = {
+            if (isAdmin) pending = runCatching { Repo.pendingInvites(ws.id) }.getOrDefault(emptyList())
             Repo.memberList(ws.id).also { l -> people = Repo.profiles(l.map { it.userId }) }
                 .sortedWith(compareBy({ ROLE_LABEL.keys.indexOf(it.role) }, { people[it.userId]?.label?.lowercase() ?: "" }))
         },
@@ -195,9 +201,9 @@ fun MembersScreen(ws: Workspace, role: String?, onError: (Throwable) -> Unit) {
         key = version,
         empty = "Keine Mitglieder gefunden.",
         header = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Einladen, Gast-Zugriffe und Entfernen", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                TextButton(onClick = { openWeb(context, "/w/${ws.id}/mitglieder") }) { Text("Im Web") }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (isAdmin) Button(onClick = { inviting = true }, modifier = Modifier.fillMaxWidth()) { Text("+ Person einladen") }
+                PendingInvitesBlock(pending) { i -> act { Repo.declineInvitation(i.id) } }
             }
         },
     ) { m: Member ->
@@ -211,6 +217,7 @@ fun MembersScreen(ws: Workspace, role: String?, onError: (Throwable) -> Unit) {
                     Text(p?.label ?: "…", fontWeight = FontWeight.SemiBold)
                     Text(p?.email ?: "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                MemberActions(m, p?.label ?: "", isAdmin, me, onRemove = { removing = m }, onAppoint = { act { Repo.appointKern(m.id) } }, onGuestAccess = { guestFor = m })
                 androidx.compose.foundation.layout.Box {
                     Chip(
                         ROLE_LABEL[m.role] ?: m.role,
@@ -229,5 +236,10 @@ fun MembersScreen(ws: Workspace, role: String?, onError: (Throwable) -> Unit) {
             }
         }
     }
+    if (inviting) InviteDialog(onDismiss = { inviting = false }) { email, r -> inviting = false; act { Repo.invite(ws.id, email, r) } }
+    guestFor?.let { m -> GuestAccessDialog(ws, m.userId, people[m.userId]?.label ?: "Gast", onDismiss = { guestFor = null }, onError = onError) }
+    removing?.let { m ->
+        ConfirmDialog("${people[m.userId]?.label ?: "Person"} entfernen?", "Die Person verliert den Zugriff auf diese Umgebung.", "Entfernen",
+            onConfirm = { removing = null; act { Repo.removeMember(m.id) } }, onDismiss = { removing = null })
+    }
 }
-

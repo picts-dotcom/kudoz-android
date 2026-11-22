@@ -235,7 +235,9 @@ private val AVATAR_COLORS = listOf("lavender", "mint", "peach", "sky", "lemon", 
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen(onError: (Throwable) -> Unit) {
+fun SettingsScreen(onSuperadmin: () -> Unit, onError: (Throwable) -> Unit) {
+    var superadmin by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { superadmin = Repo.isSuperadmin() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var profile by remember { mutableStateOf<Profile?>(null) }
@@ -295,6 +297,9 @@ fun SettingsScreen(onError: (Throwable) -> Unit) {
             OutlinedButton(onClick = {
                 context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
             }, modifier = Modifier.fillMaxWidth()) { Text("🔔 Benachrichtigungen einstellen") }
+        }
+        if (superadmin) item {
+            OutlinedButton(onClick = onSuperadmin, modifier = Modifier.fillMaxWidth()) { Text("🛡️ Superadmin") }
         }
         item {
             OutlinedButton(onClick = { openWeb(context, "/profil") }, modifier = Modifier.fillMaxWidth()) { Text("Weitere Einstellungen im Web") }

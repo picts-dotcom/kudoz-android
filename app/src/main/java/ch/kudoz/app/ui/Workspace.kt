@@ -60,7 +60,7 @@ import kotlinx.coroutines.launch
 /** Umgebung mit Reitern: Projekte, Bounties, Shoutouts, Eingang, Mitglieder. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun WorkspaceScreen(ws: Workspace, role: String?, onOpenProject: (Project) -> Unit, onError: (Throwable) -> Unit) {
+fun WorkspaceScreen(ws: Workspace, role: String?, onOpenProject: (Project) -> Unit, onGone: () -> Unit, onError: (Throwable) -> Unit) {
     var tab by remember(ws.id) { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
         PillTabs(
@@ -74,7 +74,7 @@ fun WorkspaceScreen(ws: Workspace, role: String?, onOpenProject: (Project) -> Un
             2 -> ShoutoutsScreen(ws, onError)
             3 -> InboxScreen(ws, onError)
             4 -> MembersScreen(ws, role, onError)
-            else -> WorkspaceSettingsScreen(ws, onError)
+            else -> WorkspaceSettingsScreen(ws, onGone, onError)
         }
     }
 }
