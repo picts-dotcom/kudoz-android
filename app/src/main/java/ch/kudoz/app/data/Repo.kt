@@ -137,6 +137,67 @@ object Repo {
         }
     }
 
+    // ---------- Mein Tag ----------
+
+    suspend fun myOpenCards(): List<MyCard> {
+        val uid = userId ?: return emptyList()
+        val cols = Columns.raw("cards(id, title, done, due_date, archived_at, follow_locked, project_id, projects(id, name, color, workspace_id))")
+        val a = db.from("card_assignees").select(cols) { filter { eq("user_id", uid) } }.decodeList<MyCardRow>()
+        val h = runCatching { db.from("card_helpers").select(cols) { filter { eq("user_id", uid) } }.decodeList<MyCardRow>() }.getOrDefault(emptyList())
+        return (a + h).mapNotNull { it.cards }.filter { !it.done && it.archivedAt == null }.distinctBy { it.id }
+    }
+
+    suspend fun plans(): List<Plan> {
+        val uid = userId ?: return emptyList()
+        return db.from("personal_plans").select(Columns.raw("id, card_id, scope, planned_date")) {
+            filter { eq("user_id", uid) }
+        }.decodeList()
+    }
+
+    suspend fun savePlan(cardId: String, existing: Plan?, target: Pair<String, String>?) {
+        val uid = userId ?: return
+        when {
+            target == null -> existing?.let { p -> db.from("personal_plans").delete { filter { eq("id", p.id) } } }
+            existing != null -> db.from("personal_plans").update({
+                set("scope", target.first); set("planned_date", target.second); set("updated_at", Instant.now().toString())
+            }) { filter { eq("id", existing.id) } }
+            else -> db.from("personal_plans").insert(NewPlan(uid, cardId, target.first, target.second))
+        }
+    }
+
+    // ---------- Bounties ----------
+
+    suspend fun bounties(workspaceId: String): List<Bounty> =
+        db.from("bounties").select(Columns.raw("id, title, description, kind, status, reward, claimed_by, created_by, card_id, project_id, done_at, created_at, bounty_helpers(user_id)")) {
+            filter { eq("workspace_id", workspaceId) }
+            order("created_at", Order.DESCENDING)
+            limit(300)
+        }.decodeList()
+
+    suspend fun bountyClaim(id: String, claim: Boolean) = rpc("bounty_claim") { put("_id", id); put("_claim", claim) }
+    suspend fun bountyComplete(id: String) = rpc("bounty_complete") { put("_id", id) }
+
+    // ---------- Shoutouts & Mitglieder ----------
+
+    suspend fun shoutouts(workspaceId: String): List<Shoutout> =
+        db.from("shoutouts").select(Columns.raw("id, emoji, message, from_id, to_id, created_at")) {
+            filter { eq("workspace_id", workspaceId) }
+            order("created_at", Order.DESCENDING)
+            limit(100)
+        }.decodeList()
+
+    suspend fun sendShoutout(workspaceId: String, to: String, emoji: String, message: String) {
+        val uid = userId ?: return
+        db.from("shoutouts").insert(NewShoutout(workspaceId, uid, to, emoji, message.trim().ifBlank { null }))
+    }
+
+    suspend fun deleteShoutout(id: String) { db.from("shoutouts").delete { filter { eq("id", id) } } }
+
+    suspend fun members(workspaceId: String): List<MemberRow> =
+        db.from("workspace_members").select(Columns.raw("user_id, role")) {
+            filter { eq("workspace_id", workspaceId) }
+        }.decodeList()
+
     private suspend fun rpc(name: String, args: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) {
         db.postgrest.rpc(name, buildJsonObject(args))
     }

@@ -47,6 +47,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ch.kudoz.app.data.BoardColumn
+import ch.kudoz.app.data.Bucket
+import ch.kudoz.app.data.MyDayLogic
+import ch.kudoz.app.data.Plan
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import ch.kudoz.app.data.Card
 import ch.kudoz.app.data.ChecklistItem
 import ch.kudoz.app.data.Comment
@@ -66,6 +73,8 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
     var draft by remember { mutableStateOf("") }
     var newItem by remember { mutableStateOf<Boolean>(false) }
     var waitingPrompt by remember { mutableStateOf(false) }
+    var plan by remember { mutableStateOf<Plan?>(null) }
+    var planMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
@@ -75,6 +84,7 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
             val cm = Repo.comments(cardId)
             column = Repo.columns(c.projectId).firstOrNull { it.id == c.columnId }
             people = Repo.profiles(c.assignees.map { it.userId } + cm.map { it.authorId } + cl.mapNotNull { it.assignedTo })
+            plan = runCatching { Repo.plans().firstOrNull { it.cardId == cardId } }.getOrNull()
             card = c; checklist = cl; comments = cm
         }.onFailure(onError)
     }
@@ -100,6 +110,30 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(c.title, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                if (mine && !c.done) {
+                    Spacer(Modifier.height(8.dp))
+                    val today = MyDayLogic.today()
+                    val bucket = MyDayLogic.bucketOf(plan, today)
+                    Box {
+                        Chip(
+                            "🗓 Mein Plan: " + if (bucket == Bucket.UNPLANNED) "noch offen" else bucket.label,
+                            if (bucket == Bucket.UNPLANNED) "silver" else "lemon",
+                            Modifier.clickable { planMenu = true },
+                        )
+                        DropdownMenu(expanded = planMenu, onDismissRequest = { planMenu = false }) {
+                            MyDayLogic.visibleBuckets(today).filter { it != Bucket.UNPLANNED && it != bucket }.forEach { b ->
+                                DropdownMenuItem(text = { Text(b.label) }, onClick = {
+                                    planMenu = false
+                                    act { Repo.savePlan(c.id, plan, MyDayLogic.targetFor(b, today)) }
+                                })
+                            }
+                            if (bucket != Bucket.UNPLANNED) DropdownMenuItem(text = { Text("Entplanen") }, onClick = {
+                                planMenu = false
+                                act { Repo.savePlan(c.id, plan, null) }
+                            })
+                        }
+                    }
+                }
                 c.description?.takeIf { it.isNotBlank() }?.let {
                     Spacer(Modifier.height(8.dp))
                     Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)

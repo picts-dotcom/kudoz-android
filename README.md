@@ -22,4 +22,5 @@ Den Schlüssel sicher aufbewahren: Ohne ihn lassen sich installierte Apps nicht 
 - Etappe 1: Login, Umgebungen, Projekte, Board (Spalten wischen, Karten verschieben/erledigen/anlegen),
   Karte (Übernehmen, Erledigt, Warten, Checkliste, Kommentare), Mitteilungen mit Sprung zur Karte.
 - Etappe 2: Push über Firebase (ohne Personendaten in der Nachricht).
-- Etappe 3+: Mein Tag, Bounties, Schatzkammer, Shoutouts, Eingang, Flotte, Mitglieder, Einstellungen.
+- Etappe 3: Mein Tag (eigener Reiter, Fächer wie im Web), Bounties und Shoutouts je Umgebung, «Mein Plan» in der Karte, K-Logo.
+- Etappe 4+: Schatzkammer, Shoutouts, Eingang, Flotte, Mitglieder, Einstellungen.

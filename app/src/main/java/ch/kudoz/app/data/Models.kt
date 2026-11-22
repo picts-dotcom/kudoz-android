@@ -129,3 +129,82 @@ data class Notification(
     @SerialName("read_at") val readAt: String? = null,
     @SerialName("created_at") val createdAt: String,
 )
+
+@Serializable
+data class Plan(
+    val id: String,
+    @SerialName("card_id") val cardId: String? = null,
+    val scope: String,
+    @SerialName("planned_date") val plannedDate: String,
+)
+
+@Serializable
+data class NewPlan(
+    @SerialName("user_id") val userId: String,
+    @SerialName("card_id") val cardId: String,
+    val scope: String,
+    @SerialName("planned_date") val plannedDate: String,
+)
+
+@Serializable
+data class ProjectRef(
+    val id: String,
+    val name: String,
+    val color: String = "mint",
+    @SerialName("workspace_id") val workspaceId: String,
+)
+
+/** Eigene offene Aufgabe (über card_assignees oder card_helpers) mit Projekt. */
+@Serializable
+data class MyCardRow(val cards: MyCard? = null)
+
+@Serializable
+data class MyCard(
+    val id: String,
+    val title: String,
+    val done: Boolean = false,
+    @SerialName("due_date") val dueDate: String? = null,
+    @SerialName("archived_at") val archivedAt: String? = null,
+    @SerialName("follow_locked") val followLocked: Boolean = false,
+    @SerialName("project_id") val projectId: String,
+    val projects: ProjectRef? = null,
+)
+
+@Serializable
+data class Bounty(
+    val id: String,
+    val title: String,
+    val description: String? = null,
+    val kind: String = "bounty",
+    val status: String = "open",
+    val reward: Int? = null,
+    @SerialName("claimed_by") val claimedBy: String? = null,
+    @SerialName("created_by") val createdBy: String,
+    @SerialName("card_id") val cardId: String? = null,
+    @SerialName("project_id") val projectId: String? = null,
+    @SerialName("done_at") val doneAt: String? = null,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("bounty_helpers") val helpers: List<AssigneeRef> = emptyList(),
+)
+
+@Serializable
+data class Shoutout(
+    val id: String,
+    val emoji: String,
+    val message: String? = null,
+    @SerialName("from_id") val fromId: String,
+    @SerialName("to_id") val toId: String,
+    @SerialName("created_at") val createdAt: String,
+)
+
+@Serializable
+data class NewShoutout(
+    @SerialName("workspace_id") val workspaceId: String,
+    @SerialName("from_id") val fromId: String,
+    @SerialName("to_id") val toId: String,
+    val emoji: String,
+    val message: String?,
+)
+
+@Serializable
+data class MemberRow(@SerialName("user_id") val userId: String, val role: String)

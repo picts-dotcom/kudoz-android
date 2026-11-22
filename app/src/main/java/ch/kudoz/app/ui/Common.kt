@@ -68,12 +68,11 @@ fun LoginScreen(message: String?, busy: Boolean, onLogin: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("lavender" to 64, "lemon" to 46, "mint" to 34).forEach { (c, h) ->
-                Box(Modifier.size(22.dp, h.dp).clip(RoundedCornerShape(6.dp)).background(paletteColors(c).first))
-            }
-        }
-        Spacer(Modifier.height(20.dp))
+        androidx.compose.foundation.Image(
+            androidx.compose.ui.res.painterResource(ch.kudoz.app.R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            modifier = Modifier.size(150.dp),
+        )
         Text("Kudoz", fontSize = 40.sp, fontWeight = FontWeight.Black)
         Text("Gemeinsam planen, Kudos sammeln.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(36.dp))

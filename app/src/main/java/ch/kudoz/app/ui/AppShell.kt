@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -67,7 +68,7 @@ import kotlinx.coroutines.launch
 /** Einfacher Navigationsstapel – ohne Navigation-Bibliothek, damit Zurück immer vorhersehbar ist. */
 sealed interface Screen {
     data object Workspaces : Screen
-    data class Projects(val ws: Workspace) : Screen
+    data class Projects(val ws: Workspace, val role: String? = null) : Screen
     data class Board(val ws: Workspace, val project: Project) : Screen
     data class CardDetail(val ws: Workspace, val project: Project, val cardId: String) : Screen
 }
@@ -76,6 +77,7 @@ sealed interface Screen {
 @Composable
 fun AppShell() {
     val stack = remember { mutableStateListOf<Screen>(Screen.Workspaces) }
+    // 0 = Mein Tag, 1 = Boards, 2 = Mitteilungen
     var tab by remember { mutableIntStateOf(0) }
     var unread by remember { mutableIntStateOf(0) }
     val snackbar = remember { SnackbarHostState() }
@@ -87,20 +89,33 @@ fun AppShell() {
     fun pop() { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
     fun showError(e: Throwable) { scope.launch { snackbar.showSnackbar(friendlyError(e)) } }
 
-    fun openLink(link: String) {
-        val m = Regex("^/w/([^/?#]+)/p/([^/?#]+)(?:\\?card=([^&#]+))?").find(link)
-        if (m == null) { openWeb(context, link); return }
+    fun openCard(wsId: String, projectId: String, cardId: String?) {
         scope.launch {
             runCatching {
-                val ws = Repo.workspace(m.groupValues[1])
-                val pr = Repo.project(m.groupValues[2])
-                val cardId = m.groupValues[3]
+                val ws = Repo.workspace(wsId)
+                val pr = Repo.project(projectId)
                 stack.clear(); stack.add(Screen.Workspaces); stack.add(Screen.Projects(ws))
                 stack.add(Screen.Board(ws, pr))
-                if (cardId.isNotEmpty()) stack.add(Screen.CardDetail(ws, pr, cardId))
-                tab = 0
+                if (!cardId.isNullOrEmpty()) stack.add(Screen.CardDetail(ws, pr, cardId))
+                tab = 1
             }.onFailure { showError(it) }
         }
+    }
+
+    fun openLink(link: String) {
+        val m = Regex("^/w/([^/?#]+)/p/([^/?#]+)(?:\\?card=([^&#]+))?").find(link)
+        if (m != null) { openCard(m.groupValues[1], m.groupValues[2], m.groupValues[3]); return }
+        val w = Regex("^/w/([^/?#]+)/(bounties|shoutouts)").find(link)
+        if (w != null) {
+            scope.launch {
+                runCatching {
+                    val ws = Repo.workspace(w.groupValues[1])
+                    stack.clear(); stack.add(Screen.Workspaces); stack.add(Screen.Projects(ws)); tab = 1
+                }.onFailure { showError(it) }
+            }
+            return
+        }
+        openWeb(context, link)
     }
 
     LaunchedEffect(Unit) { runCatching { unread = Repo.notifications().count { it.readAt == null } } }
@@ -109,12 +124,18 @@ fun AppShell() {
         pendingLink?.let { Push.pendingLink.value = null; openLink(if (it.startsWith("/")) it else "/$it") }
     }
 
-    BackHandler(enabled = tab == 1 || stack.size > 1) { if (tab == 1) tab = 0 else pop() }
+    // Zurück: Unterseite → Board-Liste → Mein Tag → App verlassen.
+    BackHandler(enabled = tab != 0) {
+        when {
+            tab == 1 && stack.size > 1 -> pop()
+            else -> tab = 0
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            if (tab == 0 && top !is Screen.Board && top !is Screen.CardDetail) {
+            if (tab == 1 && top !is Screen.Board && top !is Screen.CardDetail) {
                 TopAppBar(
                     title = {
                         Text(
@@ -142,10 +163,14 @@ fun AppShell() {
             NavigationBar {
                 NavigationBarItem(
                     selected = tab == 0, onClick = { tab = 0 },
+                    icon = { Icon(Icons.Default.WbSunny, null) }, label = { Text("Mein Tag") },
+                )
+                NavigationBarItem(
+                    selected = tab == 1, onClick = { if (tab == 1 && stack.size > 1) { stack.clear(); stack.add(Screen.Workspaces) }; tab = 1 },
                     icon = { Icon(Icons.Default.Dashboard, null) }, label = { Text("Boards") },
                 )
                 NavigationBarItem(
-                    selected = tab == 1, onClick = { tab = 1 },
+                    selected = tab == 2, onClick = { tab = 2 },
                     icon = {
                         BadgedBox(badge = { if (unread > 0) Badge { Text(if (unread > 99) "99+" else "$unread") } }) {
                             Icon(Icons.Default.Notifications, null)
@@ -157,11 +182,13 @@ fun AppShell() {
         },
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
-            if (tab == 1) {
+            if (tab == 0) {
+                MyDayScreen(onOpenCard = { c -> c.projects?.let { openCard(it.workspaceId, it.id, c.id) } }, onError = ::showError)
+            } else if (tab == 2) {
                 NotificationsScreen(onUnread = { unread = it }, onError = ::showError, onOpenLink = ::openLink)
             } else when (top) {
-                Screen.Workspaces -> WorkspacesScreen(onOpen = { push(Screen.Projects(it)) }, onError = ::showError)
-                is Screen.Projects -> ProjectsScreen(top.ws, onOpen = { push(Screen.Board(top.ws, it)) }, onError = ::showError)
+                Screen.Workspaces -> WorkspacesScreen(onOpen = { ws, role -> push(Screen.Projects(ws, role)) }, onError = ::showError)
+                is Screen.Projects -> WorkspaceScreen(top.ws, top.role, onOpenProject = { push(Screen.Board(top.ws, it)) }, onError = ::showError)
                 is Screen.Board -> BoardScreen(
                     top.ws, top.project,
                     onBack = { pop() },
@@ -230,7 +257,7 @@ fun ColorTile(name: String, color: String, sub: String?, onClick: () -> Unit) {
 private val ROLE = mapOf("admin" to "Admin", "kern" to "Kern", "leitung" to "Leitung", "gast" to "Gast")
 
 @Composable
-fun WorkspacesScreen(onOpen: (Workspace) -> Unit, onError: (Throwable) -> Unit) {
+fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onError: (Throwable) -> Unit) {
     LoadingList(
         load = { Repo.workspaces() },
         onError = onError,
@@ -245,7 +272,7 @@ fun WorkspacesScreen(onOpen: (Workspace) -> Unit, onError: (Throwable) -> Unit) 
         ColorTile(
             ws.name, ws.color,
             if (ws.privateOwner != null) "Kajüte · privat" else ROLE[role] ?: role,
-        ) { onOpen(ws) }
+        ) { onOpen(ws, role) }
     }
 }
 
