@@ -60,6 +60,7 @@ import ch.kudoz.app.data.Workspace
 import kotlinx.coroutines.launch
 
 /** Umgebung mit drei Reitern: Projekte, Bounties, Shoutouts. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun WorkspaceScreen(ws: Workspace, role: String?, onOpenProject: (Project) -> Unit, onError: (Throwable) -> Unit) {
     var tab by remember(ws.id) { mutableIntStateOf(0) }
