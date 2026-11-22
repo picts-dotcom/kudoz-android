@@ -44,12 +44,17 @@ object Push {
         )
     }
 
+    /** Letzter Stand der Anmeldung für Push (für die Diagnose in den Einstellungen). */
+    val status = mutableStateOf("noch nicht geprüft")
+
     /** Nach dem Anmelden und bei jedem Start: Token bei Kudoz eintragen. */
-    suspend fun register() {
-        runCatching {
-            val token = FirebaseMessaging.getInstance().token.await()
-            registerToken(token)
-        }
+    suspend fun register(): Boolean {
+        val token = runCatching { FirebaseMessaging.getInstance().token.await() }
+            .getOrElse { status.value = "❌ Firebase-Token fehlt: ${it.message ?: it.javaClass.simpleName}"; return false }
+        return runCatching { registerToken(token) }
+            .onSuccess { status.value = "✅ Gerät bei Kudoz angemeldet (…${token.takeLast(6)})" }
+            .onFailure { status.value = "❌ Anmeldung bei Kudoz fehlgeschlagen: ${it.message?.lineSequence()?.firstOrNull() ?: it.javaClass.simpleName}" }
+            .isSuccess
     }
 
     suspend fun registerToken(token: String) {

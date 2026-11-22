@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -294,9 +295,21 @@ fun SettingsScreen(onSuperadmin: () -> Unit, onError: (Throwable) -> Unit) {
         }
         item { HorizontalDivider() }
         item {
-            OutlinedButton(onClick = {
-                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
-            }, modifier = Modifier.fillMaxWidth()) { Text("🔔 Benachrichtigungen einstellen") }
+            val pushStatus by ch.kudoz.app.push.Push.status
+            val allowed = androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+            KCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("Push-Benachrichtigungen", fontWeight = FontWeight.Bold)
+                    Text(if (allowed) "✅ Benachrichtigungen erlaubt" else "❌ Benachrichtigungen sind für Kudoz ausgeschaltet", fontSize = 13.sp)
+                    Text(pushStatus, fontSize = 13.sp)
+                    Row {
+                        TextButton(onClick = { scope.launch { ch.kudoz.app.push.Push.register() } }) { Text("Neu anmelden") }
+                        TextButton(onClick = {
+                            context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+                        }) { Text("Einstellungen") }
+                    }
+                }
+            }
         }
         if (superadmin) item {
             OutlinedButton(onClick = onSuperadmin, modifier = Modifier.fillMaxWidth()) { Text("🛡️ Superadmin") }
