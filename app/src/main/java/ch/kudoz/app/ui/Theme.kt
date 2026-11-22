@@ -9,6 +9,11 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -179,14 +184,23 @@ fun KCard(
     else Card(modifier = m, shape = shape, border = b, colors = CardDefaults.cardColors(containerColor = color), content = content)
 }
 
-/** Reiter als Pillen wie die Navigation auf kudoz.ch (aktiv: beige Pille, fett). */
+/** Reiter als Pillen wie die Navigation auf kudoz.ch (aktiv: beige Pille, fett). Die aktive Pille scrollt mit. */
 @Composable
 fun PillTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+    val state = rememberLazyListState()
+    LaunchedEffect(selected, labels.size) {
+        if (selected in labels.indices) {
+            // Aktive Pille sichtbar halten, mit etwas Platz zur vorherigen.
+            state.animateScrollToItem((selected - 1).coerceAtLeast(0))
+        }
+    }
+    LazyRow(
+        modifier.fillMaxWidth(),
+        state = state,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        labels.forEachIndexed { i, l ->
+        itemsIndexed(labels) { i, l ->
             val on = i == selected
             Text(
                 l,
