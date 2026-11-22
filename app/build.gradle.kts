@@ -20,6 +20,11 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"https://kclszrnpugbsxlnmczmr.supabase.co\"")
         buildConfigField("String", "SUPABASE_KEY", "\"sb_publishable_9vZL8eI7tQDcDnBqEQTfZA_CnlUlO1r\"")
         buildConfigField("String", "WEB_URL", "\"https://kudoz.ch\"")
+        // Firebase (Projekt kudoz-2adb1) – öffentliche Kennungen, ohne google-services-Plugin.
+        buildConfigField("String", "FIREBASE_APP_ID", "\"1:27916052408:android:97a4290e2f4664482f914d\"")
+        buildConfigField("String", "FIREBASE_API_KEY", "\"AIzaSyCm2abOLsU1l4-qMCBgwmc2r_puKKraXDY\"")
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"kudoz-2adb1\"")
+        buildConfigField("String", "FIREBASE_SENDER_ID", "\"27916052408\"")
     }
 
     signingConfigs {
@@ -66,7 +71,6 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.browser:browser:1.8.0")
 
     implementation(platform("io.github.jan-tennert.supabase:bom:3.0.3"))
@@ -74,4 +78,8 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.ktor:ktor-client-android:3.0.3")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 }

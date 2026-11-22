@@ -5,6 +5,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+import ch.kudoz.app.push.KudozMessagingService
+import ch.kudoz.app.push.Push
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +29,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val loginMessage = mutableStateOf<String?>(null)
     private val loginBusy = mutableStateOf(false)
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,7 +39,15 @@ class MainActivity : ComponentActivity() {
             KudozTheme {
                 val status by KudozApp.supabase.auth.sessionStatus.collectAsState()
                 when (status) {
-                    is SessionStatus.Authenticated -> AppShell()
+                    is SessionStatus.Authenticated -> {
+                        LaunchedEffect(Unit) {
+                            if (Build.VERSION.SDK_INT >= 33 &&
+                                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            Push.register()
+                        }
+                        AppShell()
+                    }
                     is SessionStatus.Initializing -> SplashScreen()
                     else -> LoginScreen(
                         message = loginMessage.value,
@@ -48,6 +65,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        intent?.getStringExtra(KudozMessagingService.EXTRA_LINK)?.let { Push.pendingLink.value = it }
         if (intent == null || !AuthFlow.isAuthIntent(intent)) return
         loginBusy.value = true
         lifecycleScope.launch {

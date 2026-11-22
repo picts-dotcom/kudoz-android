@@ -80,6 +80,7 @@ object AuthFlow {
     }
 
     suspend fun signOut() {
+        ch.kudoz.app.push.Push.unregister()
         // LOCAL: beendet nur die Sitzung dieser App, nicht die im Browser.
         runCatching { KudozApp.supabase.auth.signOut(SignOutScope.LOCAL) }
     }

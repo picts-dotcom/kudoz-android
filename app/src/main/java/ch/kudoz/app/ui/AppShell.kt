@@ -61,6 +61,7 @@ import ch.kudoz.app.data.Notification
 import ch.kudoz.app.data.Project
 import ch.kudoz.app.data.Repo
 import ch.kudoz.app.data.Workspace
+import ch.kudoz.app.push.Push
 import kotlinx.coroutines.launch
 
 /** Einfacher Navigationsstapel – ohne Navigation-Bibliothek, damit Zurück immer vorhersehbar ist. */
@@ -86,7 +87,27 @@ fun AppShell() {
     fun pop() { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
     fun showError(e: Throwable) { scope.launch { snackbar.showSnackbar(friendlyError(e)) } }
 
+    fun openLink(link: String) {
+        val m = Regex("^/w/([^/?#]+)/p/([^/?#]+)(?:\\?card=([^&#]+))?").find(link)
+        if (m == null) { openWeb(context, link); return }
+        scope.launch {
+            runCatching {
+                val ws = Repo.workspace(m.groupValues[1])
+                val pr = Repo.project(m.groupValues[2])
+                val cardId = m.groupValues[3]
+                stack.clear(); stack.add(Screen.Workspaces); stack.add(Screen.Projects(ws))
+                stack.add(Screen.Board(ws, pr))
+                if (cardId.isNotEmpty()) stack.add(Screen.CardDetail(ws, pr, cardId))
+                tab = 0
+            }.onFailure { showError(it) }
+        }
+    }
+
     LaunchedEffect(Unit) { runCatching { unread = Repo.notifications().count { it.readAt == null } } }
+    val pendingLink by Push.pendingLink
+    LaunchedEffect(pendingLink) {
+        pendingLink?.let { Push.pendingLink.value = null; openLink(if (it.startsWith("/")) it else "/$it") }
+    }
 
     BackHandler(enabled = tab == 1 || stack.size > 1) { if (tab == 1) tab = 0 else pop() }
 
@@ -137,21 +158,7 @@ fun AppShell() {
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
             if (tab == 1) {
-                NotificationsScreen(onUnread = { unread = it }, onError = ::showError, onOpenLink = { link ->
-                    val m = Regex("^/w/([^/?#]+)/p/([^/?#]+)(?:\\?card=([^&#]+))?").find(link)
-                    if (m == null) openWeb(context, link)
-                    else scope.launch {
-                        runCatching {
-                            val ws = Repo.workspace(m.groupValues[1])
-                            val pr = Repo.project(m.groupValues[2])
-                            val cardId = m.groupValues[3]
-                            stack.clear(); stack.add(Screen.Workspaces); stack.add(Screen.Projects(ws))
-                            stack.add(Screen.Board(ws, pr))
-                            if (cardId.isNotEmpty()) stack.add(Screen.CardDetail(ws, pr, cardId))
-                            tab = 0
-                        }.onFailure { showError(it) }
-                    }
-                })
+                NotificationsScreen(onUnread = { unread = it }, onError = ::showError, onOpenLink = ::openLink)
             } else when (top) {
                 Screen.Workspaces -> WorkspacesScreen(onOpen = { push(Screen.Projects(it)) }, onError = ::showError)
                 is Screen.Projects -> ProjectsScreen(top.ws, onOpen = { push(Screen.Board(top.ws, it)) }, onError = ::showError)

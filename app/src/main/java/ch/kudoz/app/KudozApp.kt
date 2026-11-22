@@ -12,6 +12,7 @@ class KudozApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        ch.kudoz.app.push.Push.init(this)
     }
 
     companion object {
