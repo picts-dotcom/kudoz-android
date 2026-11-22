@@ -49,6 +49,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ch.kudoz.app.data.BoardColumn
+import ch.kudoz.app.data.FollowCard
+import ch.kudoz.app.data.Reaction
+import ch.kudoz.app.data.Recurrence
+import androidx.compose.material.icons.filled.PersonAddAlt
 import ch.kudoz.app.data.Bucket
 import ch.kudoz.app.data.MyDayLogic
 import ch.kudoz.app.data.Plan
@@ -66,13 +70,20 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onError: (Throwable) -> Unit) {
+fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onOpenCard: (String) -> Unit, onError: (Throwable) -> Unit) {
     var card by remember { mutableStateOf<Card?>(null) }
     var column by remember { mutableStateOf<BoardColumn?>(null) }
     var checklist by remember { mutableStateOf<List<ChecklistItem>>(emptyList()) }
     var comments by remember { mutableStateOf<List<Comment>>(emptyList()) }
     var people by remember { mutableStateOf<Map<String, Profile>>(emptyMap()) }
-    var draft by remember { mutableStateOf("") }
+    var reactions by remember { mutableStateOf<List<Reaction>>(emptyList()) }
+    var follows by remember { mutableStateOf<List<FollowCard>>(emptyList()) }
+    var parent by remember { mutableStateOf<FollowCard?>(null) }
+    var rec by remember { mutableStateOf<Recurrence?>(null) }
+    var members by remember { mutableStateOf<List<Profile>>(emptyList()) }
+    var assigningItem by remember { mutableStateOf<ChecklistItem?>(null) }
+    var addingFollow by remember { mutableStateOf(false) }
+    var editingRec by remember { mutableStateOf(false) }
     var newItem by remember { mutableStateOf<Boolean>(false) }
     var waitingPrompt by remember { mutableStateOf(false) }
     var plan by remember { mutableStateOf<Plan?>(null) }
@@ -93,6 +104,14 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
             column = Repo.columns(c.projectId).firstOrNull { it.id == c.columnId }
             people = Repo.profiles(c.assignees.map { it.userId } + cm.map { it.authorId } + cl.mapNotNull { it.assignedTo })
             plan = runCatching { Repo.plans().firstOrNull { it.cardId == cardId } }.getOrNull()
+            reactions = runCatching { Repo.reactions(cardId) }.getOrDefault(emptyList())
+            follows = runCatching { Repo.followUps(cardId) }.getOrDefault(emptyList())
+            parent = c.followsId?.let { Repo.cardTitle(it) }
+            rec = if (c.recurrenceOf == null) runCatching { Repo.recurrence(cardId) }.getOrNull() else null
+            if (members.isEmpty()) members = runCatching {
+                Repo.profiles(Repo.memberList(project.workspaceId).map { it.userId }).values.sortedBy { it.label.lowercase() }
+            }.getOrDefault(emptyList())
+            people = people + Repo.profiles(reactions.map { it.userId })
             card = c; checklist = cl; comments = cm
         }.onFailure(onError)
     }
@@ -121,7 +140,9 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
                     if (c.done) Chip("✓ erledigt", "mint")
                 }
                 Spacer(Modifier.height(10.dp))
-                Text(c.title, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Text(c.title, fontSize = 24.sp, fontFamily = Fredoka, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                ReactionsRow(reactions, me, people) { emoji, on -> act { Repo.toggleReaction(c, emoji, on) } }
                 if (mine && !c.done) {
                     Spacer(Modifier.height(8.dp))
                     val today = MyDayLogic.today()
@@ -215,8 +236,21 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = item.done, onCheckedChange = { v -> act { Repo.toggleChecklist(item.id, v) } })
                     Text(item.body, Modifier.weight(1f))
-                    item.assignedTo?.let { Avatar(people[it], 22) }
+                    if (item.assignedTo != null) Box(Modifier.clickable { assigningItem = item }) { Avatar(people[item.assignedTo], 24) }
+                    else IconButton(onClick = { assigningItem = item }) {
+                        Icon(Icons.Default.PersonAddAlt, "Zuweisen", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
+            }
+            item {
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                FollowUpsSection(parent, follows, onOpen = onOpenCard, onUnlock = { id -> act { Repo.unlockFollow(id) } }, onAdd = { addingFollow = true })
+            }
+            item {
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                RecurrenceSection(rec, c.recurrenceOf != null, onEdit = { editingRec = true }, onOpenTemplate = { c.recurrenceOf?.let(onOpenCard) })
             }
             item {
                 HorizontalDivider()
@@ -243,16 +277,24 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                draft, { draft = it }, Modifier.weight(1f),
-                placeholder = { Text("Kommentar schreiben …") }, maxLines = 4, shape = RoundedCornerShape(20.dp),
-            )
-            IconButton(enabled = draft.isNotBlank(), onClick = {
-                val body = draft; draft = ""
-                act { Repo.addComment(c.id, body) }
-            }) { Icon(Icons.AutoMirrored.Filled.Send, "Senden") }
+        MentionComposer(members.filter { it.id != me }) { body, mentions -> act { Repo.addComment(c.id, body, mentions) } }
+
+        assigningItem?.let { it ->
+            PersonPickerDialog("Wer erledigt «${it.body}»?", members, it.assignedTo, onPick = { person ->
+                assigningItem = null
+                act { Repo.assignChecklist(it.id, person) }
+            }, onDismiss = { assigningItem = null })
         }
+        if (addingFollow) TextPrompt("Neue Folgeaufgabe", "Anlegen", { addingFollow = false }, { title ->
+            addingFollow = false
+            act { Repo.addFollowUp(c, title) }
+        })
+        if (editingRec) RecurrenceDialog(
+            current = rec,
+            onSave = { r -> editingRec = false; act { Repo.setRecurrence(c.id, r) } },
+            onDelete = if (rec != null) ({ editingRec = false; act { Repo.deleteRecurrence(c.id) } }) else null,
+            onDismiss = { editingRec = false },
+        )
 
         if (newItem) TextPrompt("Neuer Checklisten-Punkt", "Hinzufügen", { newItem = false }, { body ->
             newItem = false

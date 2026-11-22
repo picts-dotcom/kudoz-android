@@ -73,7 +73,7 @@ fun LoginScreen(message: String?, busy: Boolean, onLogin: () -> Unit) {
             contentDescription = null,
             modifier = Modifier.size(150.dp),
         )
-        Text("Kudoz", fontSize = 40.sp, fontWeight = FontWeight.Black)
+        Text("Kudoz", fontSize = 40.sp, fontFamily = Fredoka, fontWeight = FontWeight.SemiBold)
         Text("Gemeinsam planen, Kudos sammeln.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(36.dp))
         if (busy) CircularProgressIndicator()
@@ -103,7 +103,7 @@ fun Avatar(p: Profile?, size: Int = 28) {
         Modifier.size(size.dp).clip(CircleShape).background(bg),
         contentAlignment = Alignment.Center,
     ) {
-        Text(p?.shortLabel ?: "?", color = inkColor, fontSize = (size * 0.4f).sp, fontWeight = FontWeight.Bold)
+        Text(p?.shortLabel ?: "?", color = inkColor, fontSize = (size * 0.38f).sp, fontFamily = Fredoka, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -124,7 +124,7 @@ fun Chip(text: String, color: String, modifier: Modifier = Modifier) {
         modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 10.dp, vertical = 3.dp),
         color = ink,
         fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.ExtraBold,
     )
 }
 

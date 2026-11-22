@@ -76,7 +76,7 @@ fun TreasuryScreen(onError: (Throwable) -> Unit) {
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("💎 Meine Sammlung", fontSize = 22.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+                Text("💎 Meine Sammlung", fontSize = 22.sp, fontFamily = Fredoka, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 Chip("${c.size} von 200", "lemon")
             }
         }

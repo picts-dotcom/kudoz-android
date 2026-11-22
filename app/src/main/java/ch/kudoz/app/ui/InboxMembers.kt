@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -68,12 +67,7 @@ fun InboxScreen(ws: Workspace, onError: (Throwable) -> Unit) {
         key = version,
         empty = "Der Eingang ist leer.\nHier landen Aufgaben, die dir andere Teams schicken.",
     ) { it: InboxItem ->
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            shape = RoundedCornerShape(18.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        KCard(modifier = Modifier.fillMaxWidth(), radius = 16) {
             Column(Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Chip(it.sourceName ?: "Andere Umgebung", it.sourceColor ?: "sky")
@@ -209,11 +203,7 @@ fun MembersScreen(ws: Workspace, role: String?, onError: (Throwable) -> Unit) {
     ) { m: Member ->
         var menu by remember { mutableStateOf(false) }
         val p = people[m.userId]
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        KCard(modifier = Modifier.fillMaxWidth()) {
             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(p, 36)
                 Spacer(Modifier.width(12.dp))

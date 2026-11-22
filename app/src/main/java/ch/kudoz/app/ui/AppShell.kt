@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -147,7 +146,7 @@ fun AppShell() {
                     title = {
                         Text(
                             when (top) { is Screen.Projects -> top.ws.name; Screen.Treasury -> "Schatzkammer"; Screen.Fleet -> "Flotte"; Screen.Settings -> "Einstellungen"; is Screen.Milestones -> "Meilensteine · ${top.project.name}"; else -> "Kudoz" },
-                            fontWeight = FontWeight.Black,
+                            fontFamily = Fredoka, fontWeight = FontWeight.SemiBold,
                         )
                     },
                     navigationIcon = {
@@ -193,7 +192,7 @@ fun AppShell() {
                 MyDayScreen(onOpenCard = { c -> c.projects?.let { openCard(it.workspaceId, it.id, c.id) } }, onError = ::showError)
             } else if (tab == 2) {
                 NotificationsScreen(onUnread = { unread = it }, onError = ::showError, onOpenLink = ::openLink)
-            } else when (top) {
+            } else androidx.compose.runtime.key(top) { when (top) {
                 Screen.Workspaces -> WorkspacesScreen(onOpen = { ws, role -> push(Screen.Projects(ws, role)) }, onTreasury = { push(Screen.Treasury) }, onFleet = { push(Screen.Fleet) }, onError = ::showError)
                 is Screen.Projects -> WorkspaceScreen(top.ws, top.role, onOpenProject = { push(Screen.Board(top.ws, it)) }, onError = ::showError)
                 is Screen.Board -> BoardScreen(
@@ -204,7 +203,7 @@ fun AppShell() {
                     onOpenMilestones = { push(Screen.Milestones(top.ws, top.project)) },
                     onError = ::showError,
                 )
-                is Screen.CardDetail -> CardDetailScreen(top.project, top.cardId, onBack = { pop() }, onError = ::showError)
+                is Screen.CardDetail -> CardDetailScreen(top.project, top.cardId, onBack = { pop() }, onOpenCard = { push(Screen.CardDetail(top.ws, top.project, it)) }, onError = ::showError)
                 is Screen.Archive -> ArchiveScreen(top.project, onBack = { pop() }, onError = ::showError)
                 Screen.Treasury -> TreasuryScreen(onError = ::showError)
                 Screen.Settings -> SettingsScreen(onError = ::showError)
@@ -214,7 +213,7 @@ fun AppShell() {
                     onOpenWorkspace = { ws, role -> stack.clear(); stack.add(Screen.Workspaces); stack.add(Screen.Projects(ws, role)) },
                     onError = ::showError,
                 )
-            }
+            } }
         }
     }
 }
@@ -254,16 +253,10 @@ fun <T> LoadingList(
 @Composable
 fun ColorTile(name: String, color: String, sub: String?, onClick: () -> Unit) {
     val (bg, ink) = paletteColors(color)
-    Card(
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
+    KCard(modifier = Modifier.fillMaxWidth(), radius = 20, onClick = onClick) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(bg), contentAlignment = Alignment.Center) {
-                Text(name.take(1).uppercase(), color = ink, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                Text(name.take(1).uppercase(), color = ink, fontFamily = Fredoka, fontWeight = FontWeight.SemiBold, fontSize = 20.sp)
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -334,20 +327,13 @@ fun NotificationsScreen(onUnread: (Int) -> Unit, onError: (Throwable) -> Unit, o
         },
     ) { n ->
         val unread = n.readAt == null
-        Card(
-            onClick = {
+        KCard(modifier = Modifier.fillMaxWidth(), color = if (unread) KudozAccent else androidx.compose.ui.graphics.Color.White, onClick = {
                 scope.launch {
                     if (unread) runCatching { Repo.markRead(n.id) }
                     version++
                 }
                 n.link?.let { onOpenLink(if (it.startsWith("/")) it else "/$it") }
-            },
-            colors = CardDefaults.cardColors(
-                containerColor = if (unread) paletteColors("lavender").first.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surface,
-            ),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+            }) {
             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (unread) Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary))
                 Spacer(Modifier.width(if (unread) 10.dp else 0.dp))

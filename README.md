@@ -26,3 +26,4 @@ Den Schlüssel sicher aufbewahren: Ohne ihn lassen sich installierte Apps nicht 
 - Etappe 4: Schatzkammer (200 Bilder lokal, 10 Kategorien), Eingang (annehmen, Rückfrage, ablehnen), Mitglieder (Rollen für Admins), Archiv je Projekt, Belohnungsbild bei Bounties.
 - Etappe 5: Flotte, Meilensteine, Aufgaben an andere Umgebungen senden, persönliche Einstellungen.
 - Etappe 6: Aufgaben bearbeiten (Titel, Beschreibung, Fälligkeit), Verantwortliche ändern, Bounty/Hilfe ausschreiben, eigene Kommentare bearbeiten/löschen.
+- Etappe 7: @-Erwähnungen, Reaktionen, Checkliste zuweisen, Folgeaufgaben, Wiederholen, Einstellungen der Umgebung; Design wie kudoz.ch (Fredoka/Nunito, Karten, Pillen-Reiter).

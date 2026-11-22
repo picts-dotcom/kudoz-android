@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -115,7 +114,7 @@ fun BoardScreen(
         TopAppBar(
             title = {
                 Column {
-                    Text(project.name, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(project.name, fontFamily = Fredoka, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(ws.name, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
@@ -132,16 +131,11 @@ fun BoardScreen(
         if (cols == null) { SplashScreen(); return@Column }
         if (cols.isEmpty()) { EmptyHint("Dieses Projekt hat noch keine Spalten."); return@Column }
 
-        ScrollableTabRow(selectedTabIndex = pager.currentPage.coerceAtMost(cols.lastIndex), edgePadding = 12.dp) {
-            cols.forEachIndexed { i, col ->
-                val n = cards.count { it.columnId == col.id }
-                Tab(
-                    selected = pager.currentPage == i,
-                    onClick = { scope.launch { pager.animateScrollToPage(i) } },
-                    text = { Text("${col.name}  $n", fontWeight = FontWeight.SemiBold) },
-                )
-            }
-        }
+        PillTabs(
+            cols.map { col -> "${col.name}  ${cards.count { it.columnId == col.id }}" },
+            pager.currentPage.coerceAtMost(cols.lastIndex),
+            { i -> scope.launch { pager.animateScrollToPage(i) } },
+        )
 
         Box(Modifier.fillMaxSize()) {
             HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
@@ -151,9 +145,11 @@ fun BoardScreen(
                     isRefreshing = refreshing,
                     onRefresh = { scope.launch { refreshing = true; reload(); refreshing = false } },
                 ) {
+                    val colBg = col.color?.let { paletteColors(it).first } ?: KudozMutedBg.copy(alpha = 0.7f)
                     LazyColumn(
-                        Modifier.fillMaxSize().background(bg.copy(alpha = 0.25f)),
-                        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 96.dp),
+                        Modifier.fillMaxSize().padding(horizontal = 10.dp).padding(top = 10.dp)
+                            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(colBg),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         if (colCards.isEmpty()) item { EmptyHint("Keine Aufgaben in «${col.name}».") }
@@ -228,16 +224,11 @@ private fun CardRow(
     var menu by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
     Box {
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).combinedClickable(
+        KCard(modifier = Modifier.fillMaxWidth(), border = false, color = if (card.done) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f) else androidx.compose.ui.graphics.Color.White) {
+            Row(Modifier.fillMaxWidth().combinedClickable(
                 onClick = onOpen,
                 onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); menu = true },
-            ),
-        ) {
-            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+            ).padding(12.dp), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         card.title,
@@ -301,7 +292,7 @@ fun ArchiveScreen(project: Project, onBack: () -> Unit, onError: (Throwable) -> 
         TopAppBar(
             title = {
                 Column {
-                    Text("Archiv", fontWeight = FontWeight.Black)
+                    Text("Archiv", fontFamily = Fredoka, fontWeight = FontWeight.SemiBold)
                     Text(project.name, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
@@ -313,11 +304,7 @@ fun ArchiveScreen(project: Project, onBack: () -> Unit, onError: (Throwable) -> 
             key = version,
             empty = "Noch nichts archiviert.",
         ) { c: ch.kudoz.app.data.ArchivedCard ->
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            KCard(modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(c.title, fontWeight = FontWeight.SemiBold)

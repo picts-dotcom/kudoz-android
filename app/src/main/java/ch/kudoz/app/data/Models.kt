@@ -55,6 +55,8 @@ data class Card(
     @SerialName("waiting_text") val waitingText: String? = null,
     @SerialName("follow_locked") val followLocked: Boolean = false,
     @SerialName("archived_at") val archivedAt: String? = null,
+    @SerialName("follows_id") val followsId: String? = null,
+    @SerialName("recurrence_of") val recurrenceOf: String? = null,
     @SerialName("card_assignees") val assignees: List<AssigneeRef> = emptyList(),
 )
 
@@ -296,4 +298,57 @@ data class NewBounty(
     @SerialName("reward_source") val rewardSource: String = "random",
     val title: String,
     val description: String?,
+)
+
+
+@Serializable
+data class Reaction(@SerialName("user_id") val userId: String, val emoji: String)
+
+@Serializable
+data class NewReaction(
+    @SerialName("card_id") val cardId: String,
+    @SerialName("project_id") val projectId: String,
+    @SerialName("user_id") val userId: String,
+    val emoji: String,
+)
+
+@Serializable
+data class FollowCard(
+    val id: String,
+    val title: String,
+    val done: Boolean = false,
+    @SerialName("follow_locked") val followLocked: Boolean = false,
+)
+
+@Serializable
+data class NewFollowCard(
+    @SerialName("project_id") val projectId: String,
+    @SerialName("column_id") val columnId: String,
+    val title: String,
+    val position: Double,
+    @SerialName("follows_id") val followsId: String,
+    @SerialName("created_by") val createdBy: String,
+)
+
+@Serializable
+data class Recurrence(
+    val kind: String,
+    val every: Int = 1,
+    val weekdays: List<Int> = emptyList(),
+    @SerialName("month_day") val monthDay: Int? = null,
+    val nth: Int? = null,
+    @SerialName("start_date") val startDate: String,
+    @SerialName("end_date") val endDate: String? = null,
+    val paused: Boolean = false,
+    val rotation: List<String> = emptyList(),
+    @SerialName("rotation_idx") val rotationIdx: Int = 0,
+)
+
+@Serializable
+data class WorkspaceRow(
+    val id: String,
+    val name: String,
+    val color: String = "lavender",
+    val icon: String = "sparkles",
+    @SerialName("auto_archive_days") val autoArchiveDays: Int = 14,
 )

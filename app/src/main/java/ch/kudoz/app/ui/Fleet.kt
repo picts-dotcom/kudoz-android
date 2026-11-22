@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -105,7 +104,7 @@ fun FleetScreen(
 
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            Text("🚢 Flotte", fontSize = 24.sp, fontWeight = FontWeight.Black)
+            Text("🚢 Flotte", fontSize = 24.sp, fontFamily = Fredoka, fontWeight = FontWeight.SemiBold)
             Text("Alles für dich aus ${wss.size} Umgebungen.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
         }
         if (inbox.isNotEmpty()) {
@@ -122,12 +121,7 @@ fun FleetScreen(
             if (l.isNotEmpty()) {
                 item { Chip("${b.label} · ${l.size}", b.color, Modifier.padding(top = 4.dp)) }
                 items(l, key = { "c" + it.id }) { c ->
-                    Card(
-                        onClick = { onOpenCard(c) },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
+                    KCard(modifier = Modifier.fillMaxWidth(), radius = 16, onClick = { onOpenCard(c) }) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(c.title, fontWeight = FontWeight.SemiBold)
@@ -144,12 +138,7 @@ fun FleetScreen(
             item { SectionTitle("🪙 Offene Bounties & Hilfe") }
             items(bounties, key = { "b" + it.id }) { b ->
                 val w = wsById[b.workspaceId]
-                Card(
-                    onClick = { w?.let { onOpenWorkspace(it.first, it.second) } },
-                    colors = CardDefaults.cardColors(containerColor = paletteColors("lemon").first.copy(alpha = 0.4f)),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
+                KCard(modifier = Modifier.fillMaxWidth(), color = KudozBountySoft, radius = 16, onClick = { w?.let { onOpenWorkspace(it.first, it.second) } }) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (b.kind == "bounty" && b.rewardImage != null) RewardImage(b.rewardImage, Modifier.size(40.dp))
                         else Text(if (b.kind == "bounty") "🪙" else "🤝", fontSize = 24.sp)
@@ -189,11 +178,7 @@ fun MilestonesPanel(project: Project, onError: (Throwable) -> Unit) {
             val mine = cards.filter { it.milestoneId == m.id }
             val done = mine.count { it.done }
             val progress = if (m.done) 1f else if (mine.isEmpty()) 0f else done.toFloat() / mine.size
-            Card(
-                colors = CardDefaults.cardColors(containerColor = if (m.done) paletteColors("mint").first.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            KCard(modifier = Modifier.fillMaxWidth(), color = if (m.done) paletteColors("mint").first else androidx.compose.ui.graphics.Color.White) {
                 Column(Modifier.padding(start = 6.dp, end = 14.dp, top = 6.dp, bottom = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = m.done, onCheckedChange = { v ->

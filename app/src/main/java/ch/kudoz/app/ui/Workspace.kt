@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -64,17 +63,18 @@ import kotlinx.coroutines.launch
 fun WorkspaceScreen(ws: Workspace, role: String?, onOpenProject: (Project) -> Unit, onError: (Throwable) -> Unit) {
     var tab by remember(ws.id) { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
-        androidx.compose.material3.ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
-            listOf("Projekte", "Bounties", "Shoutouts", "Eingang", "Mitglieder").forEachIndexed { i, t ->
-                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t, fontWeight = FontWeight.SemiBold) })
-            }
-        }
+        PillTabs(
+            listOf("Projekte", "Bounties", "Shoutouts", "Eingang", "Mitglieder") + if (role == "admin") listOf("Einstellungen") else emptyList(),
+            tab,
+            { tab = it },
+        )
         when (tab) {
             0 -> ProjectsScreen(ws, onOpen = onOpenProject, onError = onError)
             1 -> BountiesScreen(ws, role, onError)
             2 -> ShoutoutsScreen(ws, onError)
             3 -> InboxScreen(ws, onError)
-            else -> MembersScreen(ws, role, onError)
+            4 -> MembersScreen(ws, role, onError)
+            else -> WorkspaceSettingsScreen(ws, onError)
         }
     }
 }
@@ -122,12 +122,7 @@ fun BountiesScreen(ws: Workspace, role: String?, onError: (Throwable) -> Unit) {
             val mine = b.createdBy == me
             val helping = b.helpers.any { it.userId == me }
             val admin = role == "admin"
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            KCard(modifier = Modifier.fillMaxWidth(), radius = 16) {
                 Column(Modifier.padding(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (isBounty && b.rewardImage != null) RewardImage(b.rewardImage, Modifier.size(52.dp))
@@ -211,11 +206,7 @@ fun ShoutoutsScreen(ws: Workspace, onError: (Throwable) -> Unit) {
             key = version,
             empty = "Noch keine Shoutouts. Sag jemandem Danke! 🙌",
         ) { s: Shoutout ->
-            Card(
-                colors = CardDefaults.cardColors(containerColor = paletteColors(ws.color).first.copy(alpha = 0.35f)),
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            KCard(modifier = Modifier.fillMaxWidth(), color = paletteColors(ws.color).first, border = false, radius = 16) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
                     Text(s.emoji, fontSize = 30.sp)
                     Spacer(Modifier.width(12.dp))

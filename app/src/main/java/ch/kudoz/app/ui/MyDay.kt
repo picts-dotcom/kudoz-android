@@ -18,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -74,7 +73,7 @@ fun MyDayScreen(onOpenCard: (MyCard) -> Unit, onError: (Throwable) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Text(
             "Mein Tag",
-            fontSize = 26.sp, fontWeight = FontWeight.Black,
+            fontSize = 28.sp, fontFamily = Fredoka, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 18.dp, top = 16.dp, end = 18.dp),
         )
         Text(
@@ -83,15 +82,11 @@ fun MyDayScreen(onOpenCard: (MyCard) -> Unit, onError: (Throwable) -> Unit) {
             modifier = Modifier.padding(horizontal = 18.dp),
         )
         Spacer(Modifier.height(8.dp))
-        ScrollableTabRow(selectedTabIndex = buckets.indexOf(tab).coerceAtLeast(0), edgePadding = 12.dp) {
-            buckets.forEach { b ->
-                Tab(
-                    selected = tab == b,
-                    onClick = { tab = b },
-                    text = { Text("${b.label}  ${grouped[b]?.size ?: 0}", fontWeight = FontWeight.SemiBold) },
-                )
-            }
-        }
+        PillTabs(
+            buckets.map { b -> "${b.label}  ${grouped[b]?.size ?: 0}" },
+            buckets.indexOf(tab).coerceAtLeast(0),
+            { i -> tab = buckets[i] },
+        )
         if (cards == null) { SplashScreen(); return@Column }
         PullToRefreshBox(
             isRefreshing = refreshing,
@@ -158,13 +153,7 @@ private fun MyDayRow(
 ) {
     var menu by remember { mutableStateOf(false) }
     val project = card.projects
-    Card(
-        onClick = onOpen,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
+    KCard(modifier = Modifier.fillMaxWidth(), onClick = onOpen) {
         Row(Modifier.padding(start = 6.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onDone, enabled = !card.followLocked) {
                 Icon(

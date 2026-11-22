@@ -54,7 +54,8 @@ object Repo {
 
     suspend fun cards(projectId: String): List<Card> =
         db.from("cards").select(Columns.raw("*, card_assignees(user_id)")) {
-            filter { eq("project_id", projectId); exact("archived_at", null) }
+            // Gesperrte Folgeaufgaben erscheinen wie im Web nur in ihrer Vorgänger-Karte.
+            filter { eq("project_id", projectId); exact("archived_at", null); eq("follow_locked", false) }
             order("position", Order.ASCENDING)
         }.decodeList()
 
@@ -145,7 +146,7 @@ object Repo {
         val cols = Columns.raw("cards(id, title, done, due_date, archived_at, follow_locked, project_id, projects(id, name, color, workspace_id))")
         val a = db.from("card_assignees").select(cols) { filter { eq("user_id", uid) } }.decodeList<MyCardRow>()
         val h = runCatching { db.from("card_helpers").select(cols) { filter { eq("user_id", uid) } }.decodeList<MyCardRow>() }.getOrDefault(emptyList())
-        return (a + h).mapNotNull { it.cards }.filter { !it.done && it.archivedAt == null }.distinctBy { it.id }
+        return (a + h).mapNotNull { it.cards }.filter { !it.done && it.archivedAt == null && !it.followLocked }.distinctBy { it.id }
     }
 
     suspend fun plans(): List<Plan> {
@@ -352,6 +353,101 @@ object Repo {
 
     suspend fun createBounty(workspaceId: String, projectId: String?, cardId: String?, kind: String, title: String, description: String) {
         db.from("bounties").insert(NewBounty(workspaceId, projectId, cardId, kind, title = title.trim(), description = description.trim().ifBlank { null }))
+    }
+
+    // ---------- Reaktionen ----------
+
+    suspend fun reactions(cardId: String): List<Reaction> =
+        db.from("card_reactions").select(Columns.raw("user_id, emoji")) { filter { eq("card_id", cardId) } }.decodeList()
+
+    suspend fun toggleReaction(card: Card, emoji: String, on: Boolean) {
+        val uid = userId ?: return
+        if (on) db.from("card_reactions").insert(NewReaction(card.id, card.projectId, uid, emoji))
+        else db.from("card_reactions").delete { filter { eq("card_id", card.id); eq("user_id", uid); eq("emoji", emoji) } }
+    }
+
+    // ---------- Erwähnungen ----------
+
+    suspend fun addComment(cardId: String, body: String, mentions: List<String>) {
+        val uid = userId ?: return
+        db.from("card_comments").insert(NewComment(cardId, uid, body.trim(), mentions.distinct()))
+    }
+
+    // ---------- Checkliste zuweisen ----------
+
+    suspend fun assignChecklist(itemId: String, person: String?) = rpc("checklist_assign") {
+        put("_item", itemId)
+        if (person != null) put("_person", person) else put("_person", kotlinx.serialization.json.JsonNull)
+    }
+
+    // ---------- Folgeaufgaben ----------
+
+    suspend fun followUps(cardId: String): List<FollowCard> =
+        db.from("cards").select(Columns.raw("id, title, done, follow_locked")) {
+            filter { eq("follows_id", cardId); exact("archived_at", null) }
+            order("position", Order.ASCENDING)
+        }.decodeList()
+
+    suspend fun cardTitle(cardId: String): FollowCard? =
+        runCatching { db.from("cards").select(Columns.raw("id, title, done, follow_locked")) { filter { eq("id", cardId) } }.decodeSingle<FollowCard>() }.getOrNull()
+
+    suspend fun addFollowUp(card: Card, title: String) {
+        val uid = userId ?: return
+        val cols = columns(card.projectId).filter { !it.isDone }
+        val col = cols.firstOrNull { it.kind == "open" } ?: cols.firstOrNull { it.kind != "idea" } ?: cols.firstOrNull()
+        db.from("cards").insert(NewFollowCard(card.projectId, col?.id ?: card.columnId, title.trim(), System.currentTimeMillis() / 1e12 + 1000, card.id, uid))
+    }
+
+    suspend fun unlockFollow(cardId: String) = rpc("card_follow_unlock") { put("_card", cardId) }
+
+    // ---------- Wiederkehrend ----------
+
+    suspend fun recurrence(templateId: String): Recurrence? =
+        db.from("card_recurrences").select(Columns.raw("kind, every, weekdays, month_day, nth, start_date, end_date, paused, rotation, rotation_idx")) {
+            filter { eq("card_id", templateId) }
+        }.decodeList<Recurrence>().firstOrNull()
+
+    suspend fun setRecurrence(cardId: String, r: Recurrence) = rpc("recurrence_set") {
+        put("_card", cardId); put("_kind", r.kind); put("_every", r.every)
+        put("_weekdays", kotlinx.serialization.json.JsonArray(r.weekdays.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+        if (r.monthDay != null) put("_month_day", r.monthDay) else put("_month_day", kotlinx.serialization.json.JsonNull)
+        if (r.nth != null) put("_nth", r.nth) else put("_nth", kotlinx.serialization.json.JsonNull)
+        put("_start", r.startDate)
+        if (r.endDate != null) put("_end", r.endDate) else put("_end", kotlinx.serialization.json.JsonNull)
+        put("_rotation", kotlinx.serialization.json.JsonArray(r.rotation.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+        put("_rotation_idx", if (r.rotation.isEmpty()) 0 else r.rotationIdx % r.rotation.size)
+        put("_paused", r.paused)
+    }
+
+    suspend fun deleteRecurrence(cardId: String) = rpc("recurrence_delete") { put("_card", cardId) }
+
+    // ---------- Einstellungen der Umgebung ----------
+
+    suspend fun workspaceRow(id: String): WorkspaceRow =
+        db.from("workspaces").select(Columns.raw("id, name, color, icon, auto_archive_days")) { filter { eq("id", id) } }.decodeSingle()
+
+    suspend fun updateWorkspace(id: String, name: String, color: String, autoArchiveDays: Int) {
+        db.from("workspaces").update({ set("name", name.trim()); set("color", color); set("auto_archive_days", autoArchiveDays) }) {
+            filter { eq("id", id) }
+        }
+    }
+
+    /** Rechte-Tabelle (Gäste oder Kern) als Schalter-Map lesen. */
+    suspend fun permissions(table: String, workspaceId: String): Map<String, Boolean> {
+        val rows = db.from(table).select { filter { eq("workspace_id", workspaceId) } }
+            .decodeList<kotlinx.serialization.json.JsonObject>()
+        val row = rows.firstOrNull() ?: return emptyMap()
+        return row.filterKeys { it != "workspace_id" && it != "updated_at" }
+            .mapNotNull { (k, v) -> (v as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull()?.let { k to it } }
+            .toMap()
+    }
+
+    suspend fun setPermissions(table: String, workspaceId: String, values: Map<String, Boolean>) {
+        val obj = buildJsonObject {
+            put("workspace_id", workspaceId)
+            values.forEach { (k, v) -> put(k, v) }
+        }
+        db.from(table).upsert(obj)
     }
 
     private suspend fun rpc(name: String, args: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) {
