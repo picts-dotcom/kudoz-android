@@ -1,0 +1,44 @@
+name: APK bauen
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Signaturschlüssel bereitstellen
+        env:
+          KEYSTORE_B64: ${{ secrets.KUDOZ_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/kudoz.jks"
+            echo "KUDOZ_KEYSTORE_PATH=$RUNNER_TEMP/kudoz.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Kein Schlüssel hinterlegt – APK wird mit Debug-Schlüssel signiert (Updates nicht möglich)."
+          fi
+      - name: APK bauen
+        env:
+          KUDOZ_KEYSTORE_PASSWORD: ${{ secrets.KUDOZ_KEYSTORE_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+      - name: APK umbenennen
+        run: cp app/build/outputs/apk/release/app-release.apk "kudoz-${{ github.run_number }}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kudoz-apk-${{ github.run_number }}
+          path: kudoz-${{ github.run_number }}.apk
+      - name: Als Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Kudoz ${{ github.run_number }}
+          files: kudoz-${{ github.run_number }}.apk
+          prerelease: true
