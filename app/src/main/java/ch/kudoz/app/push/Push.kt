@@ -49,8 +49,21 @@ object Push {
 
     /** Nach dem Anmelden und bei jedem Start: Token bei Kudoz eintragen. */
     suspend fun register(): Boolean {
-        val token = runCatching { FirebaseMessaging.getInstance().token.await() }
-            .getOrElse { status.value = "❌ Firebase-Token fehlt: ${it.message ?: it.javaClass.simpleName}"; return false }
+        status.value = "⏳ Frage Firebase nach dem Geräte-Token …"
+        val avail = com.google.android.gms.common.GoogleApiAvailability.getInstance()
+        val code = avail.isGooglePlayServicesAvailable(KudozApp.instance)
+        if (code != com.google.android.gms.common.ConnectionResult.SUCCESS) {
+            status.value = "❌ Google-Play-Dienste nicht bereit: ${avail.getErrorString(code)}"
+            return false
+        }
+        val token = runCatching {
+            kotlinx.coroutines.withTimeout(25_000) { FirebaseMessaging.getInstance().token.await() }
+        }.getOrElse {
+            val cause = generateSequence(it) { e -> e.cause }.joinToString(" ← ") { e -> e.message ?: e.javaClass.simpleName }
+            status.value = "❌ Firebase-Token fehlt: $cause"
+            return false
+        }
+        status.value = "⏳ Token erhalten, melde bei Kudoz an …"
         return runCatching { registerToken(token) }
             .onSuccess { status.value = "✅ Gerät bei Kudoz angemeldet (…${token.takeLast(6)})" }
             .onFailure { status.value = "❌ Anmeldung bei Kudoz fehlgeschlagen: ${it.message?.lineSequence()?.firstOrNull() ?: it.javaClass.simpleName}" }
