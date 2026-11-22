@@ -24,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
@@ -82,6 +84,7 @@ fun BoardScreen(
     project: Project,
     onBack: () -> Unit,
     onOpenCard: (String) -> Unit,
+    onOpenArchive: () -> Unit,
     onError: (Throwable) -> Unit,
 ) {
     var columns by remember { mutableStateOf<List<BoardColumn>?>(null) }
@@ -117,6 +120,7 @@ fun BoardScreen(
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
             actions = {
                 IconButton(onClick = { scope.launch { reload() } }) { Icon(Icons.Default.Refresh, "Neu laden") }
+                IconButton(onClick = onOpenArchive) { Icon(Icons.Default.Inventory2, "Archiv") }
                 IconButton(onClick = { openWeb(context, "/w/${ws.id}/p/${project.id}") }) {
                     Icon(Icons.Default.OpenInBrowser, "Im Web öffnen")
                 }
@@ -161,6 +165,12 @@ fun BoardScreen(
                                     scope.launch {
                                         val pos = (cards.filter { it.columnId == target.id }.maxOfOrNull { it.position } ?: 0.0) + 1000.0
                                         runCatching { Repo.move(card.id, target.id, pos) }.onFailure(onError)
+                                        reload()
+                                    }
+                                },
+                                onArchive = {
+                                    scope.launch {
+                                        runCatching { Repo.setArchived(listOf(card.id), true) }.onFailure(onError)
                                         reload()
                                     }
                                 },
@@ -209,6 +219,7 @@ private fun CardRow(
     accent: androidx.compose.ui.graphics.Color,
     onOpen: () -> Unit,
     onMove: (BoardColumn) -> Unit,
+    onArchive: () -> Unit,
     onToggleDone: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -254,6 +265,7 @@ private fun CardRow(
                 text = { Text(if (card.done) "Wieder öffnen" else "Erledigt ✓") },
                 onClick = { menu = false; onToggleDone() },
             )
+            if (card.done) DropdownMenuItem(text = { Text("Archivieren") }, onClick = { menu = false; onArchive() })
             HorizontalDivider()
             Text("Verschieben nach …", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             columns.filter { it.id != card.columnId }.forEach { col ->
@@ -273,4 +285,46 @@ fun TextPrompt(title: String, confirm: String, onDismiss: () -> Unit, onConfirm:
         confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = { onConfirm(text) }) { Text(confirm) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
     )
+}
+
+
+/** Archiv eines Projekts: archivierte Aufgaben ansehen und zurückholen (nichts geht verloren). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ArchiveScreen(project: Project, onBack: () -> Unit, onError: (Throwable) -> Unit) {
+    var version by remember { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = {
+                Column {
+                    Text("Archiv", fontWeight = FontWeight.Black)
+                    Text(project.name, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
+        )
+        LoadingList(
+            load = { Repo.archived(project.id) },
+            onError = onError,
+            key = version,
+            empty = "Noch nichts archiviert.",
+        ) { c: ch.kudoz.app.data.ArchivedCard ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(c.title, fontWeight = FontWeight.SemiBold)
+                        c.doneAt?.let { Text("erledigt ${relativeTime(it)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                    IconButton(onClick = {
+                        scope.launch { runCatching { Repo.setArchived(listOf(c.id), false) }.onFailure(onError); version++ }
+                    }) { Icon(Icons.Default.Unarchive, "Zurückholen") }
+                }
+            }
+        }
+    }
 }

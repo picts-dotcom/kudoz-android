@@ -178,6 +178,7 @@ data class Bounty(
     val kind: String = "bounty",
     val status: String = "open",
     val reward: Int? = null,
+    @SerialName("reward_image") val rewardImage: Int? = null,
     @SerialName("claimed_by") val claimedBy: String? = null,
     @SerialName("created_by") val createdBy: String,
     @SerialName("card_id") val cardId: String? = null,
@@ -208,3 +209,40 @@ data class NewShoutout(
 
 @Serializable
 data class MemberRow(@SerialName("user_id") val userId: String, val role: String)
+
+@Serializable
+data class LedgerEntry(val id: String, val image: Int, val delta: Int)
+
+@Serializable
+data class InboxItem(
+    val id: String,
+    val title: String,
+    val description: String? = null,
+    val message: String? = null,
+    @SerialName("due_date") val dueDate: String? = null,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("sender_name") val senderName: String? = null,
+    @SerialName("sender_initials") val senderInitials: String? = null,
+    @SerialName("sender_bg") val senderBg: String? = null,
+    @SerialName("sender_ink") val senderInk: String? = null,
+    @SerialName("source_name") val sourceName: String? = null,
+    @SerialName("source_color") val sourceColor: String? = null,
+    val checklist: kotlinx.serialization.json.JsonElement? = null,
+    val comments: kotlinx.serialization.json.JsonElement? = null,
+)
+
+@Serializable
+data class Member(
+    val id: String,
+    @SerialName("user_id") val userId: String,
+    val role: String,
+)
+
+@Serializable
+data class ArchivedCard(
+    val id: String,
+    val title: String,
+    @SerialName("project_id") val projectId: String,
+    @SerialName("done_at") val doneAt: String? = null,
+    @SerialName("archived_at") val archivedAt: String? = null,
+)

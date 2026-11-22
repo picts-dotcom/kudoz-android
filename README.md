@@ -23,4 +23,5 @@ Den Schlüssel sicher aufbewahren: Ohne ihn lassen sich installierte Apps nicht 
   Karte (Übernehmen, Erledigt, Warten, Checkliste, Kommentare), Mitteilungen mit Sprung zur Karte.
 - Etappe 2: Push über Firebase (ohne Personendaten in der Nachricht).
 - Etappe 3: Mein Tag (eigener Reiter, Fächer wie im Web), Bounties und Shoutouts je Umgebung, «Mein Plan» in der Karte, K-Logo.
-- Etappe 4+: Schatzkammer, Shoutouts, Eingang, Flotte, Mitglieder, Einstellungen.
+- Etappe 4: Schatzkammer (200 Bilder lokal, 10 Kategorien), Eingang (annehmen, Rückfrage, ablehnen), Mitglieder (Rollen für Admins), Archiv je Projekt, Belohnungsbild bei Bounties.
+- Etappe 5+: Flotte, Meilensteine, Einstellungen, Aufgaben senden.

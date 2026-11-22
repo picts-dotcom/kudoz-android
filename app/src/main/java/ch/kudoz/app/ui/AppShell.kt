@@ -71,6 +71,8 @@ sealed interface Screen {
     data class Projects(val ws: Workspace, val role: String? = null) : Screen
     data class Board(val ws: Workspace, val project: Project) : Screen
     data class CardDetail(val ws: Workspace, val project: Project, val cardId: String) : Screen
+    data class Archive(val ws: Workspace, val project: Project) : Screen
+    data object Treasury : Screen
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -135,11 +137,11 @@ fun AppShell() {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            if (tab == 1 && top !is Screen.Board && top !is Screen.CardDetail) {
+            if (tab == 1 && top !is Screen.Board && top !is Screen.CardDetail && top !is Screen.Archive) {
                 TopAppBar(
                     title = {
                         Text(
-                            when (top) { is Screen.Projects -> top.ws.name; else -> "Kudoz" },
+                            when (top) { is Screen.Projects -> top.ws.name; Screen.Treasury -> "Schatzkammer"; else -> "Kudoz" },
                             fontWeight = FontWeight.Black,
                         )
                     },
@@ -187,15 +189,18 @@ fun AppShell() {
             } else if (tab == 2) {
                 NotificationsScreen(onUnread = { unread = it }, onError = ::showError, onOpenLink = ::openLink)
             } else when (top) {
-                Screen.Workspaces -> WorkspacesScreen(onOpen = { ws, role -> push(Screen.Projects(ws, role)) }, onError = ::showError)
+                Screen.Workspaces -> WorkspacesScreen(onOpen = { ws, role -> push(Screen.Projects(ws, role)) }, onTreasury = { push(Screen.Treasury) }, onError = ::showError)
                 is Screen.Projects -> WorkspaceScreen(top.ws, top.role, onOpenProject = { push(Screen.Board(top.ws, it)) }, onError = ::showError)
                 is Screen.Board -> BoardScreen(
                     top.ws, top.project,
                     onBack = { pop() },
                     onOpenCard = { push(Screen.CardDetail(top.ws, top.project, it)) },
+                    onOpenArchive = { push(Screen.Archive(top.ws, top.project)) },
                     onError = ::showError,
                 )
                 is Screen.CardDetail -> CardDetailScreen(top.project, top.cardId, onBack = { pop() }, onError = ::showError)
+                is Screen.Archive -> ArchiveScreen(top.project, onBack = { pop() }, onError = ::showError)
+                Screen.Treasury -> TreasuryScreen(onError = ::showError)
             }
         }
     }
@@ -209,6 +214,7 @@ fun <T> LoadingList(
     empty: String,
     key: Any? = Unit,
     header: (@Composable () -> Unit)? = null,
+    footer: (@Composable () -> Unit)? = null,
     row: @Composable (T) -> Unit,
 ) {
     var items by remember(key) { mutableStateOf<List<T>?>(null) }
@@ -227,6 +233,7 @@ fun <T> LoadingList(
             header?.let { h -> item { h() } }
             if (list.isEmpty()) item { EmptyHint(empty) }
             items(list) { row(it) }
+            footer?.let { f -> item { f() } }
         }
     }
 }
@@ -257,7 +264,7 @@ fun ColorTile(name: String, color: String, sub: String?, onClick: () -> Unit) {
 private val ROLE = mapOf("admin" to "Admin", "kern" to "Kern", "leitung" to "Leitung", "gast" to "Gast")
 
 @Composable
-fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onError: (Throwable) -> Unit) {
+fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onTreasury: () -> Unit, onError: (Throwable) -> Unit) {
     LoadingList(
         load = { Repo.workspaces() },
         onError = onError,
@@ -267,6 +274,11 @@ fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onError: (Throwable) -
                 "Hallo ${Repo.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() } ?: ""} 👋",
                 fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp),
             )
+        },
+        footer = {
+            androidx.compose.material3.TextButton(onClick = onTreasury, modifier = Modifier.fillMaxWidth()) {
+                Text("💎 Meine Schatzkammer", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         },
     ) { (ws, role) ->
         ColorTile(

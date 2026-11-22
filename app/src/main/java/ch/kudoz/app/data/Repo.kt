@@ -6,6 +6,7 @@ import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.time.Instant
@@ -168,7 +169,7 @@ object Repo {
     // ---------- Bounties ----------
 
     suspend fun bounties(workspaceId: String): List<Bounty> =
-        db.from("bounties").select(Columns.raw("id, title, description, kind, status, reward, claimed_by, created_by, card_id, project_id, done_at, created_at, bounty_helpers(user_id)")) {
+        db.from("bounties").select(Columns.raw("id, title, description, kind, status, reward, reward_image, claimed_by, created_by, card_id, project_id, done_at, created_at, bounty_helpers(user_id)")) {
             filter { eq("workspace_id", workspaceId) }
             order("created_at", Order.DESCENDING)
             limit(300)
@@ -197,6 +198,68 @@ object Repo {
         db.from("workspace_members").select(Columns.raw("user_id, role")) {
             filter { eq("workspace_id", workspaceId) }
         }.decodeList()
+
+    // ---------- Schatzkammer ----------
+
+    /** Anzahl Exemplare je Bild (Summe der Buchungen, nur > 0) – wie src/lib/treasury.ts. */
+    suspend fun treasury(): Map<Int, Int> {
+        val uid = userId ?: return emptyMap()
+        val all = mutableListOf<LedgerEntry>()
+        var offset = 0L
+        while (true) {
+            val page = db.from("reward_ledger").select(Columns.raw("id, image, delta")) {
+                filter { eq("user_id", uid) }
+                order("id", Order.ASCENDING)
+                range(offset, offset + 999)
+            }.decodeList<LedgerEntry>()
+            all += page
+            if (page.size < 1000) break
+            offset += 1000
+        }
+        return all.groupBy { it.image }.mapValues { (_, l) -> l.sumOf { it.delta } }.filterValues { it > 0 }
+    }
+
+    // ---------- Eingang ----------
+
+    suspend fun inbox(workspaceId: String): List<InboxItem> =
+        db.postgrest.rpc("ws_inbox", buildJsonObject { put("_ws", workspaceId) }).decodeList()
+
+    suspend fun transferAccept(id: String, projectId: String, columnId: String?) =
+        rpc("transfer_accept") {
+            put("_id", id); put("_project", projectId)
+            if (columnId != null) put("_column", columnId) else put("_column", kotlinx.serialization.json.JsonNull)
+            put("_assignee", kotlinx.serialization.json.JsonNull)
+        }
+
+    suspend fun transferDecline(id: String, reason: String) = rpc("transfer_decline") { put("_id", id); put("_reason", reason) }
+    suspend fun transferAsk(id: String, question: String) = rpc("transfer_ask") { put("_id", id); put("_question", question) }
+
+    // ---------- Mitglieder ----------
+
+    suspend fun memberList(workspaceId: String): List<Member> =
+        db.from("workspace_members").select(Columns.raw("id, user_id, role")) {
+            filter { eq("workspace_id", workspaceId) }
+        }.decodeList()
+
+    suspend fun setRole(memberId: String, role: String) {
+        db.from("workspace_members").update({ set("role", role) }) { filter { eq("id", memberId) } }
+    }
+
+    // ---------- Archiv ----------
+
+    suspend fun archived(projectId: String): List<ArchivedCard> =
+        db.from("cards").select(Columns.raw("id, title, project_id, done_at, archived_at")) {
+            filter { eq("project_id", projectId); filterNot("archived_at", FilterOperator.IS, "null") }
+            order("archived_at", Order.DESCENDING)
+            limit(500)
+        }.decodeList()
+
+    suspend fun setArchived(cardIds: List<String>, archive: Boolean) {
+        db.postgrest.rpc("cards_archive", buildJsonObject {
+            put("_cards", kotlinx.serialization.json.JsonArray(cardIds.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+            put("_archive", archive)
+        })
+    }
 
     private suspend fun rpc(name: String, args: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) {
         db.postgrest.rpc(name, buildJsonObject(args))

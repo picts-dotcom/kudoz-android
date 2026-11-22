@@ -33,7 +33,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -59,21 +58,23 @@ import ch.kudoz.app.data.Shoutout
 import ch.kudoz.app.data.Workspace
 import kotlinx.coroutines.launch
 
-/** Umgebung mit drei Reitern: Projekte, Bounties, Shoutouts. */
+/** Umgebung mit Reitern: Projekte, Bounties, Shoutouts, Eingang, Mitglieder. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun WorkspaceScreen(ws: Workspace, role: String?, onOpenProject: (Project) -> Unit, onError: (Throwable) -> Unit) {
     var tab by remember(ws.id) { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
-        PrimaryTabRow(selectedTabIndex = tab) {
-            listOf("Projekte", "Bounties", "Shoutouts").forEachIndexed { i, t ->
+        androidx.compose.material3.ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
+            listOf("Projekte", "Bounties", "Shoutouts", "Eingang", "Mitglieder").forEachIndexed { i, t ->
                 Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t, fontWeight = FontWeight.SemiBold) })
             }
         }
         when (tab) {
             0 -> ProjectsScreen(ws, onOpen = onOpenProject, onError = onError)
             1 -> BountiesScreen(ws, role, onError)
-            else -> ShoutoutsScreen(ws, onError)
+            2 -> ShoutoutsScreen(ws, onError)
+            3 -> InboxScreen(ws, onError)
+            else -> MembersScreen(ws, role, onError)
         }
     }
 }
@@ -127,7 +128,8 @@ fun BountiesScreen(ws: Workspace, role: String?, onError: (Throwable) -> Unit) {
         ) {
             Column(Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (isBounty) "🪙" else "🤝", fontSize = 26.sp)
+                    if (isBounty && b.rewardImage != null) RewardImage(b.rewardImage, Modifier.size(52.dp))
+                    else Text(if (isBounty) "🪙" else "🤝", fontSize = 26.sp)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(b.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
