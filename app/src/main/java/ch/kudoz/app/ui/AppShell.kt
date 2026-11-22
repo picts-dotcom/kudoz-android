@@ -203,7 +203,7 @@ fun AppShell() {
                     onOpenMilestones = { push(Screen.Milestones(top.ws, top.project)) },
                     onError = ::showError,
                 )
-                is Screen.CardDetail -> CardDetailScreen(top.project, top.cardId, onBack = { pop() }, onOpenCard = { push(Screen.CardDetail(top.ws, top.project, it)) }, onError = ::showError)
+                is Screen.CardDetail -> CardDetailScreen(top.ws, top.project, top.cardId, onBack = { pop() }, onOpenCard = { push(Screen.CardDetail(top.ws, top.project, it)) }, onError = ::showError)
                 is Screen.Archive -> ArchiveScreen(top.project, onBack = { pop() }, onError = ::showError)
                 Screen.Treasury -> TreasuryScreen(onError = ::showError)
                 Screen.Settings -> SettingsScreen(onError = ::showError)

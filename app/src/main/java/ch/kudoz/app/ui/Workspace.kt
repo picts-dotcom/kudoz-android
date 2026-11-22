@@ -69,7 +69,7 @@ fun WorkspaceScreen(ws: Workspace, role: String?, onOpenProject: (Project) -> Un
             { tab = it },
         )
         when (tab) {
-            0 -> ProjectsScreen(ws, onOpen = onOpenProject, onError = onError)
+            0 -> ProjectsManageScreen(ws, onOpen = onOpenProject, onError = onError)
             1 -> BountiesScreen(ws, role, onError)
             2 -> ShoutoutsScreen(ws, onError)
             3 -> InboxScreen(ws, onError)

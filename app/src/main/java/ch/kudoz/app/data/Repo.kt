@@ -450,6 +450,203 @@ object Repo {
         db.from(table).upsert(obj)
     }
 
+    // ================= Etappe 8/9 =================
+
+    private fun arr(l: List<String>) = kotlinx.serialization.json.JsonArray(l.map { kotlinx.serialization.json.JsonPrimitive(it) })
+    private fun kotlinx.serialization.json.JsonObjectBuilder.putOrNull(k: String, v: String?) { if (v != null) put(k, v) else put(k, kotlinx.serialization.json.JsonNull) }
+
+    // ---------- Projekte ----------
+
+    suspend fun projectsAll(workspaceId: String): List<ProjectFull> =
+        db.from("projects").select { filter { eq("workspace_id", workspaceId) }; order("position", Order.ASCENDING) }.decodeList()
+
+    suspend fun createProject(ws: String, name: String, color: String, description: String): String =
+        db.postgrest.rpc("create_project", buildJsonObject {
+            put("_ws", ws); put("_name", name.trim()); put("_color", color); put("_icon", "sparkles"); put("_description", description.trim())
+        }).decodeAs<String>()
+
+    suspend fun updateProject(id: String, name: String, description: String?, color: String) {
+        db.from("projects").update({ set("name", name.trim()); set("description", description?.trim()?.ifBlank { null }); set("color", color) }) { filter { eq("id", id) } }
+    }
+
+    suspend fun setProjectStatus(id: String, status: String) {
+        db.from("projects").update({ set("status", status); set("archived", status == "archived") }) { filter { eq("id", id) } }
+    }
+
+    suspend fun deleteProject(id: String) { db.from("projects").delete { filter { eq("id", id) } } }
+
+    suspend fun reorderProjects(ws: String, ids: List<String>) = rpc("projects_reorder") { put("_ws", ws); put("_ids", arr(ids)) }
+
+    // ---------- Spalten ----------
+
+    suspend fun addColumn(projectId: String, name: String, position: Double) { db.from("board_columns").insert(NewColumn(projectId, name.trim(), position)) }
+
+    suspend fun updateColumn(id: String, name: String, color: String?) {
+        db.from("board_columns").update({ set("name", name.trim()); set("color", color) }) { filter { eq("id", id) } }
+    }
+
+    suspend fun swapColumns(a: BoardColumn, b: BoardColumn) {
+        db.from("board_columns").update({ set("position", b.position) }) { filter { eq("id", a.id) } }
+        db.from("board_columns").update({ set("position", a.position) }) { filter { eq("id", b.id) } }
+    }
+
+    suspend fun deleteColumn(id: String) { db.from("board_columns").delete { filter { eq("id", id) } } }
+
+    // ---------- Meilensteine bearbeiten ----------
+
+    suspend fun addMilestone(projectId: String, title: String, due: String?, description: String, position: Double) {
+        db.from("milestones").insert(NewMilestone(projectId, title.trim(), due, description.trim().ifBlank { null }, position))
+    }
+
+    suspend fun updateMilestone(id: String, title: String, due: String?, description: String) {
+        db.from("milestones").update({ set("title", title.trim()); set("due_date", due); set("description", description.trim().ifBlank { null }) }) { filter { eq("id", id) } }
+    }
+
+    suspend fun deleteMilestone(id: String) { db.from("milestones").delete { filter { eq("id", id) } } }
+
+    suspend fun setCardMilestone(cardId: String, milestoneId: String?) {
+        db.from("cards").update({ set("milestone_id", milestoneId) }) { filter { eq("id", cardId) } }
+    }
+
+    // ---------- Karte: löschen, Dokumente, Helfen, Fokus, Warten auf ----------
+
+    suspend fun deleteCard(id: String) { db.from("cards").delete { filter { eq("id", id) } } }
+
+    suspend fun documents(cardId: String): List<CardDocument> =
+        db.from("card_documents").select(Columns.raw("id, url, title, note, created_by")) { filter { eq("card_id", cardId) }; order("created_at", Order.ASCENDING) }.decodeList()
+
+    suspend fun addDocument(cardId: String, url: String, title: String, note: String) {
+        val uid = userId ?: return
+        val clean = url.trim().let { if (it.startsWith("http://") || it.startsWith("https://")) it else "https://$it" }
+        db.from("card_documents").insert(NewDocument(cardId, clean, title.trim().ifBlank { null }, note.trim().ifBlank { null }, uid))
+    }
+
+    suspend fun deleteDocument(id: String) { db.from("card_documents").delete { filter { eq("id", id) } } }
+
+    suspend fun helpers(cardId: String): List<String> =
+        db.from("card_helpers").select(Columns.raw("user_id")) { filter { eq("card_id", cardId) } }.decodeList<HelperRow>().map { it.userId }
+
+    suspend fun setHelp(cardId: String, help: Boolean, person: String? = null) = rpc("card_help") {
+        put("_card", cardId); put("_help", help); if (person != null) put("_person", person)
+    }
+
+    suspend fun focus(cardId: String, person: String) = rpc("card_focus") { put("_card", cardId); put("_person", person) }
+
+    suspend fun waitFor(cardId: String, target: String?) = rpc("card_set_waiting_for") { put("_card", cardId); putOrNull("_target", target) }
+
+    suspend fun moveWithin(cardId: String, columnId: String, position: Double) = move(cardId, columnId, position)
+
+    // ---------- Bounty aus der Schatzkammer ----------
+
+    suspend fun createBountyFromTreasury(ws: String, projectId: String?, cardId: String?, title: String, description: String, image: Int) {
+        db.from("bounties").insert(buildJsonObject {
+            put("workspace_id", ws); putOrNull("project_id", projectId); putOrNull("card_id", cardId)
+            put("kind", "bounty"); put("reward_source", "treasury"); put("reward_image", image)
+            put("title", title.trim()); putOrNull("description", description.trim().ifBlank { null })
+        })
+    }
+
+    // ---------- Umgebungen ----------
+
+    suspend fun ensureCabin(): String? = runCatching { db.postgrest.rpc("ensure_cabin").decodeAs<String>() }.getOrNull()
+
+    suspend fun createWorkspace(name: String, color: String): String =
+        db.postgrest.rpc("create_workspace", buildJsonObject { put("_name", name.trim()); put("_color", color); put("_icon", "sparkles") }).decodeAs<String>()
+
+    suspend fun myInvitations(): List<Invitation> = runCatching { db.postgrest.rpc("my_invitations").decodeList<Invitation>() }.getOrDefault(emptyList())
+
+    suspend fun acceptInvitation(id: String) = rpc("accept_invitation") { put("_id", id) }
+
+    suspend fun declineInvitation(id: String) { db.from("workspace_invitations").delete { filter { eq("id", id) } } }
+
+    suspend fun directory(): List<DirectoryShip> = db.postgrest.rpc("directory_workspaces").decodeList()
+
+    suspend fun requestJoin(ws: String, message: String) = rpc("request_join") { put("_ws", ws); put("_message", message.trim()) }
+
+    suspend fun myRole(ws: String): String? = runCatching { db.postgrest.rpc("ws_role", buildJsonObject { put("_ws", ws) }).decodeAs<String>() }.getOrNull()
+
+    suspend fun bringAboard(cardId: String, projectId: String, columnId: String?, keepNotes: Boolean) = rpc("cabin_bring_aboard") {
+        put("_card", cardId); put("_project", projectId); putOrNull("_column", columnId); put("_keep_notes", keepNotes)
+    }
+
+    suspend fun search(query: String, projectIds: List<String>): List<SearchHit> {
+        if (projectIds.isEmpty() || query.isBlank()) return emptyList()
+        val safe = query.trim().replace("%", "").replace("_", "").replace(",", " ")
+        return db.from("cards").select(Columns.raw("id, title, project_id, done")) {
+            filter { isIn("project_id", projectIds); eq("follow_locked", false); exact("archived_at", null); ilike("title", "%$safe%") }
+            limit(40)
+        }.decodeList()
+    }
+
+    suspend fun allMyProjects(wsIds: List<String>): List<ProjectFull> =
+        if (wsIds.isEmpty()) emptyList() else db.from("projects").select { filter { isIn("workspace_id", wsIds); eq("archived", false) } }.decodeList()
+
+    // ---------- Verwaltung ----------
+
+    suspend fun pendingInvites(ws: String): List<PendingInvite> =
+        db.from("workspace_invitations").select(Columns.raw("id, email, role")) { filter { eq("workspace_id", ws) } }.decodeList()
+
+    suspend fun invite(ws: String, email: String, role: String) {
+        val uid = userId ?: return
+        db.from("workspace_invitations").insert(NewInvite(ws, email.trim().lowercase(), role, uid))
+    }
+
+    suspend fun removeMember(memberId: String) { db.from("workspace_members").delete { filter { eq("id", memberId) } } }
+
+    suspend fun appointKern(memberId: String) = rpc("appoint_kern_member") { put("_member", memberId) }
+
+    suspend fun guestProjects(userId: String, projectIds: List<String>): Set<String> =
+        if (projectIds.isEmpty()) emptySet() else db.from("project_guests").select(Columns.raw("project_id, user_id")) {
+            filter { eq("user_id", userId); isIn("project_id", projectIds) }
+        }.decodeList<kotlinx.serialization.json.JsonObject>().mapNotNull { (it["project_id"] as? kotlinx.serialization.json.JsonPrimitive)?.content }.toSet()
+
+    suspend fun setGuestAccess(projectId: String, user: String, enabled: Boolean) = rpc("set_guest_project_access") {
+        put("_project", projectId); put("_user", user); put("_enabled", enabled)
+    }
+
+    suspend fun visibility(ws: String): Visibility =
+        db.from("workspace_visibility").select { filter { eq("workspace_id", ws) } }.decodeList<Visibility>().firstOrNull() ?: Visibility()
+
+    suspend fun setVisibility(ws: String, v: Visibility) = rpc("set_workspace_visibility") {
+        put("_ws", ws); put("_visible", v.visible); put("_description", v.description.orEmpty()); put("_allow_join", v.allowJoin)
+        put("_show_roles", arr(v.showRoles)); put("_inbox", arr(v.inboxUserIds))
+    }
+
+    suspend fun joinRequests(ws: String): List<JoinRequest> =
+        db.from("workspace_join_requests").select(Columns.raw("id, user_id, message, created_at")) {
+            filter { eq("workspace_id", ws); eq("status", "pending") }; order("created_at", Order.ASCENDING)
+        }.decodeList()
+
+    suspend fun decideJoin(id: String, accept: Boolean, role: String, reason: String) = rpc("decide_join") {
+        put("_id", id); put("_accept", accept); put("_role", role); put("_projects", arr(emptyList())); put("_reason", reason)
+    }
+
+    suspend fun duty(ws: String): DutySettings =
+        db.from("workspace_duty_settings").select(Columns.raw("enabled, guests_see")) { filter { eq("workspace_id", ws) } }.decodeList<DutySettings>().firstOrNull() ?: DutySettings()
+
+    suspend fun setDuty(ws: String, d: DutySettings) {
+        db.from("workspace_duty_settings").upsert(buildJsonObject { put("workspace_id", ws); put("enabled", d.enabled); put("guests_see", d.guestsSee) })
+    }
+
+    suspend fun setWorkspaceIcon(ws: String, icon: String) { db.from("workspaces").update({ set("icon", icon) }) { filter { eq("id", ws) } } }
+
+    suspend fun deleteWorkspace(ws: String) { db.from("workspaces").delete { filter { eq("id", ws) } } }
+
+    suspend fun leaveWorkspace(ws: String) {
+        val uid = userId ?: return
+        db.from("workspace_members").delete { filter { eq("workspace_id", ws); eq("user_id", uid) } }
+    }
+
+    // ---------- Superadmin ----------
+
+    suspend fun isSuperadmin(): Boolean = runCatching { db.postgrest.rpc("is_superadmin").decodeAs<Boolean>() }.getOrDefault(false)
+    suspend fun superWorkspaces(): List<SuperWs> = db.postgrest.rpc("superadmin_workspaces").decodeList()
+    suspend fun superList(): List<SuperAdminRow> = db.postgrest.rpc("superadmin_list").decodeList()
+    suspend fun superAdd(email: String) = rpc("superadmin_add") { put("_email", email.trim().lowercase()) }
+    suspend fun superRemove(email: String) = rpc("superadmin_remove") { put("_email", email) }
+    suspend fun superSetAdmin(ws: String, email: String) = rpc("superadmin_set_admin") { put("_ws", ws); put("_email", email.trim().lowercase()) }
+    suspend fun superDeleteWorkspace(ws: String) = rpc("superadmin_delete_workspace") { put("_ws", ws) }
+
     private suspend fun rpc(name: String, args: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) {
         db.postgrest.rpc(name, buildJsonObject(args))
     }

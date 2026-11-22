@@ -49,6 +49,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ch.kudoz.app.data.BoardColumn
+import ch.kudoz.app.data.CardDocument
+import ch.kudoz.app.data.Workspace
+import androidx.compose.material.icons.filled.MoreVert
 import ch.kudoz.app.data.FollowCard
 import ch.kudoz.app.data.Reaction
 import ch.kudoz.app.data.Recurrence
@@ -70,7 +73,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onOpenCard: (String) -> Unit, onError: (Throwable) -> Unit) {
+fun CardDetailScreen(ws: Workspace, project: Project, cardId: String, onBack: () -> Unit, onOpenCard: (String) -> Unit, onError: (Throwable) -> Unit) {
     var card by remember { mutableStateOf<Card?>(null) }
     var column by remember { mutableStateOf<BoardColumn?>(null) }
     var checklist by remember { mutableStateOf<List<ChecklistItem>>(emptyList()) }
@@ -84,6 +87,12 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onOpe
     var assigningItem by remember { mutableStateOf<ChecklistItem?>(null) }
     var addingFollow by remember { mutableStateOf(false) }
     var editingRec by remember { mutableStateOf(false) }
+    var docs by remember { mutableStateOf<List<CardDocument>>(emptyList()) }
+    var helpers by remember { mutableStateOf<List<String>>(emptyList()) }
+    var waitTitle by remember { mutableStateOf<String?>(null) }
+    var milestoneTitle by remember { mutableStateOf<String?>(null) }
+    var moreMenu by remember { mutableStateOf(false) }
+    var dialog by remember { mutableStateOf<String?>(null) }
     var newItem by remember { mutableStateOf<Boolean>(false) }
     var waitingPrompt by remember { mutableStateOf(false) }
     var plan by remember { mutableStateOf<Plan?>(null) }
@@ -111,7 +120,11 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onOpe
             if (members.isEmpty()) members = runCatching {
                 Repo.profiles(Repo.memberList(project.workspaceId).map { it.userId }).values.sortedBy { it.label.lowercase() }
             }.getOrDefault(emptyList())
-            people = people + Repo.profiles(reactions.map { it.userId })
+            docs = runCatching { Repo.documents(cardId) }.getOrDefault(emptyList())
+            helpers = runCatching { Repo.helpers(cardId) }.getOrDefault(emptyList())
+            waitTitle = c.waitingFor?.let { Repo.cardTitle(it)?.title }
+            milestoneTitle = c.milestoneId?.let { mid -> runCatching { Repo.milestones(c.projectId).firstOrNull { it.id == mid }?.title }.getOrNull() }
+            people = people + Repo.profiles(reactions.map { it.userId } + helpers)
             card = c; checklist = cl; comments = cm
         }.onFailure(onError)
     }
@@ -125,6 +138,15 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onOpe
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
             actions = {
                 if (card != null) IconButton(onClick = { editing = true }) { Icon(Icons.Default.Edit, "Bearbeiten") }
+                if (card != null) Box {
+                    IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, "Mehr") }
+                    DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                        DropdownMenuItem(text = { Text("🚩 Meilenstein") }, onClick = { moreMenu = false; dialog = "milestone" })
+                        DropdownMenuItem(text = { Text("⏳ Wartet auf Aufgabe …") }, onClick = { moreMenu = false; dialog = "waitfor" })
+                        if (ws.privateOwner != null) DropdownMenuItem(text = { Text("⚓ An Bord bringen") }, onClick = { moreMenu = false; dialog = "aboard" })
+                        DropdownMenuItem(text = { Text("Löschen", color = MaterialTheme.colorScheme.error) }, onClick = { moreMenu = false; dialog = "delete" })
+                    }
+                }
                 if (card != null) IconButton(onClick = { sending = true }) { Icon(Icons.Default.Sailing, "An andere Umgebung senden") }
             },
         )
@@ -143,6 +165,8 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onOpe
                 Text(c.title, fontSize = 24.sp, fontFamily = Fredoka, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
                 ReactionsRow(reactions, me, people) { emoji, on -> act { Repo.toggleReaction(c, emoji, on) } }
+                milestoneTitle?.let { Spacer(Modifier.height(4.dp)); Chip("🚩 $it", "periwinkle", Modifier.clickable { dialog = "milestone" }) }
+                waitTitle?.let { Spacer(Modifier.height(4.dp)); Chip("⏳ wartet auf: $it", "peach", Modifier.clickable { c.waitingFor?.let(onOpenCard) }) }
                 if (mine && !c.done) {
                     Spacer(Modifier.height(8.dp))
                     val today = MyDayLogic.today()
@@ -245,6 +269,16 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onOpe
             item {
                 HorizontalDivider()
                 Spacer(Modifier.height(8.dp))
+                HelpersSection(helpers, people, me, onToggleMe = { on -> act { Repo.setHelp(c.id, on) } }, onFocus = { dialog = "focus" })
+            }
+            item {
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                DocumentsSection(docs, me, onAdd = { dialog = "doc" }, onDelete = { id -> act { Repo.deleteDocument(id) } })
+            }
+            item {
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
                 FollowUpsSection(parent, follows, onOpen = onOpenCard, onUnlock = { id -> act { Repo.unlockFollow(id) } }, onAdd = { addingFollow = true })
             }
             item {
@@ -289,7 +323,20 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onOpe
             addingFollow = false
             act { Repo.addFollowUp(c, title) }
         })
+        when (dialog) {
+            "doc" -> DocumentDialog(onDismiss = { dialog = null }) { u, t, n -> dialog = null; act { Repo.addDocument(c.id, u, t, n) } }
+            "focus" -> PersonPickerDialog("Wen möchtest du auf diese Aufgabe aufmerksam machen?", members.filter { it.id != me }, null, onPick = { p ->
+                dialog = null; if (p != null) act { Repo.focus(c.id, p) }
+            }, onDismiss = { dialog = null })
+            "waitfor" -> WaitForDialog(c, onDismiss = { dialog = null }, onPick = { t -> dialog = null; act { Repo.waitFor(c.id, t) } }, onError = onError)
+            "milestone" -> MilestonePickDialog(c.projectId, c.milestoneId, onDismiss = { dialog = null }, onPick = { m -> dialog = null; act { Repo.setCardMilestone(c.id, m) } }, onError = onError)
+            "aboard" -> BringAboardDialog(c, onDismiss = { dialog = null }, onDone = { dialog = null; onBack() }, onError = onError)
+            "delete" -> ConfirmDialog("Aufgabe löschen?", "«${c.title}» wird mit Checkliste und Kommentaren endgültig gelöscht.", "Löschen",
+                onConfirm = { dialog = null; scope.launch { runCatching { Repo.deleteCard(c.id) }.onSuccess { onBack() }.onFailure(onError) } },
+                onDismiss = { dialog = null })
+        }
         if (editingRec) RecurrenceDialog(
+            members = members,
             current = rec,
             onSave = { r -> editingRec = false; act { Repo.setRecurrence(c.id, r) } },
             onDelete = if (rec != null) ({ editingRec = false; act { Repo.deleteRecurrence(c.id) } }) else null,

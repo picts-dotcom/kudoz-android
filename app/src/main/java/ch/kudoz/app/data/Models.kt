@@ -56,6 +56,8 @@ data class Card(
     @SerialName("follow_locked") val followLocked: Boolean = false,
     @SerialName("archived_at") val archivedAt: String? = null,
     @SerialName("follows_id") val followsId: String? = null,
+    @SerialName("milestone_id") val milestoneId: String? = null,
+    @SerialName("waiting_for") val waitingFor: String? = null,
     @SerialName("recurrence_of") val recurrenceOf: String? = null,
     @SerialName("card_assignees") val assignees: List<AssigneeRef> = emptyList(),
 )
@@ -352,3 +354,111 @@ data class WorkspaceRow(
     val icon: String = "sparkles",
     @SerialName("auto_archive_days") val autoArchiveDays: Int = 14,
 )
+
+@Serializable
+data class CardDocument(
+    val id: String,
+    val url: String,
+    val title: String? = null,
+    val note: String? = null,
+    @SerialName("created_by") val createdBy: String,
+)
+
+@Serializable
+data class NewDocument(
+    @SerialName("card_id") val cardId: String,
+    val url: String,
+    val title: String?,
+    val note: String?,
+    @SerialName("created_by") val createdBy: String,
+)
+
+@Serializable
+data class HelperRow(@SerialName("user_id") val userId: String)
+
+@Serializable
+data class ProjectFull(
+    val id: String,
+    val name: String,
+    val color: String = "mint",
+    val icon: String = "sparkles",
+    val description: String? = null,
+    val status: String = "active",
+    val archived: Boolean = false,
+    val position: Double = 0.0,
+    @SerialName("workspace_id") val workspaceId: String,
+    @SerialName("is_board_duties") val isBoardDuties: Boolean = false,
+)
+
+@Serializable
+data class NewColumn(@SerialName("project_id") val projectId: String, val name: String, val position: Double, val kind: String = "open")
+
+@Serializable
+data class NewMilestone(
+    @SerialName("project_id") val projectId: String,
+    val title: String,
+    @SerialName("due_date") val dueDate: String?,
+    val description: String?,
+    val position: Double,
+)
+
+@Serializable
+data class Invitation(
+    val id: String,
+    @SerialName("workspace_id") val workspaceId: String,
+    @SerialName("workspace_name") val workspaceName: String,
+    val color: String = "lavender",
+    val role: String,
+)
+
+@Serializable
+data class PendingInvite(val id: String, val email: String, val role: String)
+
+@Serializable
+data class NewInvite(
+    @SerialName("workspace_id") val workspaceId: String,
+    val email: String,
+    val role: String,
+    @SerialName("invited_by") val invitedBy: String,
+)
+
+@Serializable
+data class DirectoryShip(
+    val id: String,
+    val name: String,
+    val color: String = "sky",
+    val description: String? = null,
+    @SerialName("allow_join") val allowJoin: Boolean = false,
+    @SerialName("request_status") val requestStatus: String? = null,
+)
+
+@Serializable
+data class JoinRequest(val id: String, @SerialName("user_id") val userId: String, val message: String? = null, @SerialName("created_at") val createdAt: String)
+
+@Serializable
+data class Visibility(
+    val visible: Boolean = false,
+    val description: String? = null,
+    @SerialName("allow_join") val allowJoin: Boolean = false,
+    @SerialName("show_roles") val showRoles: List<String> = emptyList(),
+    @SerialName("inbox_user_ids") val inboxUserIds: List<String> = emptyList(),
+)
+
+@Serializable
+data class DutySettings(val enabled: Boolean = false, @SerialName("guests_see") val guestsSee: Boolean = false)
+
+@Serializable
+data class SearchHit(val id: String, val title: String, @SerialName("project_id") val projectId: String, val done: Boolean = false)
+
+@Serializable
+data class SuperWs(
+    val id: String,
+    val name: String,
+    val color: String = "lavender",
+    @SerialName("member_count") val memberCount: Int = 0,
+    val admins: List<String> = emptyList(),
+    @SerialName("is_demo") val isDemo: Boolean = false,
+)
+
+@Serializable
+data class SuperAdminRow(val email: String, val permanent: Boolean = false)

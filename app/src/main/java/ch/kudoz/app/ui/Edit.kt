@@ -155,6 +155,8 @@ fun BountyDialog(
     var projects by remember { mutableStateOf<List<Project>>(emptyList()) }
     var project by remember { mutableStateOf(fixedProject) }
     var busy by remember { mutableStateOf(false) }
+    var fromTreasury by remember { mutableStateOf(false) }
+    var image by remember { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(workspaceId) { if (fixedProject == null) runCatching { projects = Repo.projects(workspaceId) }.onFailure(onError) }
 
@@ -182,18 +184,28 @@ fun BountyDialog(
                 }
                 if (kind == "bounty") {
                     Spacer(Modifier.height(10.dp))
-                    Text(
-                        "🎲 Die Belohnung ist ein zufälliger Gegenstand. Eine Belohnung aus deiner Schatzkammer wählst du im Web.",
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        SegmentedButton(selected = !fromTreasury, onClick = { fromTreasury = false; image = null }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("🎲 Zufall") }
+                        SegmentedButton(selected = fromTreasury, onClick = { fromTreasury = true }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("💎 Schatzkammer") }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    if (fromTreasury) TreasuryPicker(image, { image = it }, onError)
+                    else Text(
+                        "Beim Ausschreiben entsteht ein zufälliger Gegenstand.",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         },
         confirmButton = {
-            TextButton(enabled = title.isNotBlank() && !busy, onClick = {
+            TextButton(enabled = title.isNotBlank() && !busy && !(kind == "bounty" && fromTreasury && image == null), onClick = {
                 busy = true
                 scope.launch {
-                    runCatching { Repo.createBounty(workspaceId, project?.id, card?.id, kind, title, description) }
+                    runCatching {
+                        val img = image
+                        if (kind == "bounty" && fromTreasury && img != null) Repo.createBountyFromTreasury(workspaceId, project?.id, card?.id, title, description, img)
+                        else Repo.createBounty(workspaceId, project?.id, card?.id, kind, title, description)
+                    }
                         .onSuccess { onCreated() }.onFailure { busy = false; onError(it) }
                 }
             }) { Text("Ausschreiben") }

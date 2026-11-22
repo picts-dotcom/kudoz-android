@@ -248,7 +248,7 @@ private fun fmtDate(s: String) = runCatching { LocalDate.parse(s.take(10)).forma
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun RecurrenceDialog(current: Recurrence?, onSave: (Recurrence) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
+fun RecurrenceDialog(members: List<Profile> = emptyList(), current: Recurrence?, onSave: (Recurrence) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
     val today = LocalDate.now()
     val initKind = current?.let {
         if (it.kind == "weekly" && it.every == 2) "biweekly" else if (it.kind == "weekly" && it.every > 2) "custom_weeks" else it.kind
@@ -262,6 +262,7 @@ fun RecurrenceDialog(current: Recurrence?, onSave: (Recurrence) -> Unit, onDelet
     var end by remember { mutableStateOf(current?.endDate) }
     var paused by remember { mutableStateOf(current?.paused ?: false) }
     var picking by remember { mutableStateOf<String?>(null) }
+    val rotation = remember { mutableStateListOf<String>().apply { addAll(current?.rotation.orEmpty()) } }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -310,10 +311,19 @@ fun RecurrenceDialog(current: Recurrence?, onSave: (Recurrence) -> Unit, onDelet
                     Text("Pausiert", Modifier.weight(1f))
                     Switch(paused, { paused = it })
                 }
-                if (current?.rotation?.isNotEmpty() == true) Text(
-                    "Die Rotation der Verantwortlichen bleibt erhalten (bearbeiten im Web).",
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (members.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Rotation (optional)", fontWeight = FontWeight.SemiBold)
+                    Text("Wer ist der Reihe nach verantwortlich? Antippen in der gewünschten Reihenfolge.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        members.forEach { p ->
+                            val idx = rotation.indexOf(p.id)
+                            FilterChip(selected = idx >= 0, onClick = { if (idx >= 0) rotation.remove(p.id) else rotation += p.id },
+                                label = { Text(if (idx >= 0) "${idx + 1}. ${p.label}" else p.label) })
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -328,7 +338,7 @@ fun RecurrenceDialog(current: Recurrence?, onSave: (Recurrence) -> Unit, onDelet
                         monthDay = if (dbKind == "monthly_day") (monthDay.toIntOrNull() ?: 1).coerceIn(1, 31) else null,
                         nth = if (dbKind == "monthly_nth") nth else null,
                         startDate = start, endDate = end, paused = paused,
-                        rotation = current?.rotation.orEmpty(), rotationIdx = current?.rotationIdx ?: 0,
+                        rotation = rotation.toList(), rotationIdx = if (rotation.toList() == current?.rotation) (current?.rotationIdx ?: 0) else 0,
                     ),
                 )
             }) { Text("Speichern") }

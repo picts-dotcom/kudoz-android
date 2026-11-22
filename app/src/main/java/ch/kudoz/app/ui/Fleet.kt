@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -167,12 +168,16 @@ fun MilestonesPanel(project: Project, onError: (Throwable) -> Unit) {
     var milestones by remember { mutableStateOf<List<Milestone>?>(null) }
     var cards by remember { mutableStateOf<List<MilestoneCard>>(emptyList()) }
     var version by remember { mutableIntStateOf(0) }
+    var editing by remember { mutableStateOf<Milestone?>(null) }
+    var creating by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    fun act(b: suspend () -> Unit) = scope.launch { runCatching { b() }.onFailure(onError); version++ }
     LaunchedEffect(project.id, version) {
         runCatching { milestones = Repo.milestones(project.id); cards = Repo.milestoneCards(project.id) }.onFailure(onError)
     }
     val list = milestones ?: run { SplashScreen(); return }
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Box(Modifier.fillMaxSize()) {
+    LazyColumn(contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (list.isEmpty()) item { EmptyHint("Dieses Projekt hat keine Meilensteine.") }
         items(list, key = { it.id }) { m ->
             val mine = cards.filter { it.milestoneId == m.id }
@@ -189,6 +194,7 @@ fun MilestonesPanel(project: Project, onError: (Throwable) -> Unit) {
                             m.description?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                         dueInfo(m.dueDate)?.let { (t, c) -> Chip(t, if (m.done) "mint" else c) }
+                        androidx.compose.material3.IconButton(onClick = { editing = m }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Edit, "Bearbeiten") }
                     }
                     Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         LinearProgressIndicator(
@@ -204,7 +210,22 @@ fun MilestonesPanel(project: Project, onError: (Throwable) -> Unit) {
             }
         }
     }
+        ExtendedFloatingActionButton(
+            onClick = { creating = true },
+            icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Add, null) }, text = { Text("Meilenstein") },
+            containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+        )
+    }
+    if (creating) MilestoneEditDialog(null, onDismiss = { creating = false }, onSave = { t, d, desc ->
+        creating = false; act { Repo.addMilestone(project.id, t, d, desc, (list.maxOfOrNull { it.position } ?: 0.0) + 1.0) }
+    }, onDelete = null)
+    editing?.let { m ->
+        MilestoneEditDialog(m, onDismiss = { editing = null }, onSave = { t, d, desc -> editing = null; act { Repo.updateMilestone(m.id, t, d, desc) } },
+            onDelete = { editing = null; act { Repo.deleteMilestone(m.id) } })
+    }
 }
+
 
 // ---------------------------------------------------------------- Einstellungen
 

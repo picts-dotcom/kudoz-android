@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInBrowser
@@ -93,6 +94,7 @@ fun BoardScreen(
     var people by remember { mutableStateOf<Map<String, Profile>>(emptyMap()) }
     var refreshing by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<BoardColumn?>(null) }
+    var managingCols by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val (bg, ink) = paletteColors(project.color)
@@ -121,6 +123,7 @@ fun BoardScreen(
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
             actions = {
                 IconButton(onClick = { scope.launch { reload() } }) { Icon(Icons.Default.Refresh, "Neu laden") }
+                IconButton(onClick = { managingCols = true }) { Icon(Icons.Default.ViewColumn, "Spalten") }
                 IconButton(onClick = onOpenMilestones) { Icon(Icons.Default.Flag, "Meilensteine") }
                 IconButton(onClick = onOpenArchive) { Icon(Icons.Default.Inventory2, "Archiv") }
                 IconButton(onClick = { openWeb(context, "/w/${ws.id}/p/${project.id}") }) {
@@ -167,6 +170,16 @@ fun BoardScreen(
                                         reload()
                                     }
                                 },
+                                onReorder = { dir ->
+                                    val i = colCards.indexOf(card); val j = i + dir
+                                    if (j in colCards.indices) scope.launch {
+                                        val other = colCards[j]
+                                        val beyond = colCards.getOrNull(j + dir)?.position
+                                        val pos = if (beyond == null) other.position + dir * 1000.0 else (other.position + beyond) / 2
+                                        runCatching { Repo.move(card.id, col.id, pos) }.onFailure(onError)
+                                        reload()
+                                    }
+                                },
                                 onArchive = {
                                     scope.launch {
                                         runCatching { Repo.setArchived(listOf(card.id), true) }.onFailure(onError)
@@ -193,6 +206,9 @@ fun BoardScreen(
         }
     }
 
+    if (managingCols) cols?.let { c ->
+        ColumnsDialog(project.id, c, onDismiss = { managingCols = false }, onChanged = { scope.launch { reload() } }, onError = onError)
+    }
     adding?.let { col ->
         TextPrompt(
             title = "Neue Aufgabe in «${col.name}»",
@@ -218,6 +234,7 @@ private fun CardRow(
     accent: androidx.compose.ui.graphics.Color,
     onOpen: () -> Unit,
     onMove: (BoardColumn) -> Unit,
+    onReorder: (Int) -> Unit,
     onArchive: () -> Unit,
     onToggleDone: () -> Unit,
 ) {
@@ -259,6 +276,8 @@ private fun CardRow(
                 text = { Text(if (card.done) "Wieder öffnen" else "Erledigt ✓") },
                 onClick = { menu = false; onToggleDone() },
             )
+            DropdownMenuItem(text = { Text("↑ Nach oben") }, onClick = { menu = false; onReorder(-1) })
+            DropdownMenuItem(text = { Text("↓ Nach unten") }, onClick = { menu = false; onReorder(1) })
             if (card.done) DropdownMenuItem(text = { Text("Archivieren") }, onClick = { menu = false; onArchive() })
             HorizontalDivider()
             Text("Verschieben nach …", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
