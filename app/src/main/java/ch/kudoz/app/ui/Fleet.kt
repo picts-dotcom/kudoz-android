@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -194,7 +196,7 @@ fun MilestonesPanel(project: Project, onError: (Throwable) -> Unit) {
                             m.description?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                         dueInfo(m.dueDate)?.let { (t, c) -> Chip(t, if (m.done) "mint" else c) }
-                        androidx.compose.material3.IconButton(onClick = { editing = m }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Edit, "Bearbeiten") }
+                        androidx.compose.material3.IconButton(onClick = { editing = m }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Edit, "Bearbeiten") }
                     }
                     Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         LinearProgressIndicator(
@@ -212,7 +214,7 @@ fun MilestonesPanel(project: Project, onError: (Throwable) -> Unit) {
     }
         ExtendedFloatingActionButton(
             onClick = { creating = true },
-            icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Add, null) }, text = { Text("Meilenstein") },
+            icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Add, null) }, text = { Text("Meilenstein") },
             containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
         )
