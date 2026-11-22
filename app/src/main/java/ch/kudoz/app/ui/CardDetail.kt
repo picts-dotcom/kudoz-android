@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.filled.Sailing
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -74,6 +75,8 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
     var newItem by remember { mutableStateOf<Boolean>(false) }
     var waitingPrompt by remember { mutableStateOf(false) }
     var plan by remember { mutableStateOf<Plan?>(null) }
+    var sending by remember { mutableStateOf(false) }
+    var sentTo by remember { mutableStateOf<String?>(null) }
     var planMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -96,6 +99,9 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
         TopAppBar(
             title = { Text(project.name, fontSize = 16.sp) },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
+            actions = {
+                if (card != null) IconButton(onClick = { sending = true }) { Icon(Icons.Default.Sailing, "An andere Umgebung senden") }
+            },
         )
         val c = card ?: run { SplashScreen(); return@Column }
         val me = Repo.userId
@@ -235,6 +241,17 @@ fun CardDetailScreen(project: Project, cardId: String, onBack: () -> Unit, onErr
             newItem = false
             act { Repo.addChecklistItem(c, body, (checklist.maxOfOrNull { it.position } ?: 0.0) + 1.0) }
         })
+        if (sending) SendTaskDialog(project.workspaceId, c, onDismiss = { sending = false }, onSent = { name ->
+            sending = false; sentTo = name; scope.launch { reload() }
+        }, onError = onError)
+        sentTo?.let { name ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { sentTo = null },
+                confirmButton = { TextButton(onClick = { sentTo = null }) { Text("OK") } },
+                title = { Text("⛵ Unterwegs") },
+                text = { Text("Die Aufgabe ist an «$name» geschickt und wartet dort im Eingang.") },
+            )
+        }
         if (waitingPrompt) TextPrompt("Worauf wartest du?", "Speichern", { waitingPrompt = false }, { t ->
             waitingPrompt = false
             act { Repo.setWaiting(c.id, t) }

@@ -1,0 +1,307 @@
+package ch.kudoz.app.ui
+
+import android.content.Intent
+import android.provider.Settings
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import ch.kudoz.app.BuildConfig
+import ch.kudoz.app.data.AuthFlow
+import ch.kudoz.app.data.FleetBounty
+import ch.kudoz.app.data.InboxCount
+import ch.kudoz.app.data.Milestone
+import ch.kudoz.app.data.MilestoneCard
+import ch.kudoz.app.data.MyCard
+import ch.kudoz.app.data.Profile
+import ch.kudoz.app.data.Project
+import ch.kudoz.app.data.Repo
+import ch.kudoz.app.data.Workspace
+import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
+
+// ---------------------------------------------------------------- Flotte
+
+private enum class DueBucket(val label: String, val color: String) {
+    OVERDUE("Überfällig", "rose"), TODAY("Heute", "lemon"), WEEK("Diese Woche", "sky"), LATER("Später", "mint"), NONE("Ohne Datum", "silver")
+}
+
+private fun dueBucket(due: String?): DueBucket {
+    val d = runCatching { LocalDate.parse(due?.take(10)) }.getOrNull() ?: return DueBucket.NONE
+    val diff = ChronoUnit.DAYS.between(LocalDate.now(), d)
+    return when {
+        diff < 0 -> DueBucket.OVERDUE
+        diff == 0L -> DueBucket.TODAY
+        diff <= 7 -> DueBucket.WEEK
+        else -> DueBucket.LATER
+    }
+}
+
+/** Flotte: alles Persönliche über alle Umgebungen – Aufgaben nach Fälligkeit, Eingänge, offene Bounties. */
+@Composable
+fun FleetScreen(
+    onOpenCard: (MyCard) -> Unit,
+    onOpenWorkspace: (Workspace, String) -> Unit,
+    onError: (Throwable) -> Unit,
+) {
+    var cards by remember { mutableStateOf<List<MyCard>?>(null) }
+    var wss by remember { mutableStateOf<List<Pair<Workspace, String>>>(emptyList()) }
+    var inbox by remember { mutableStateOf<List<InboxCount>>(emptyList()) }
+    var bounties by remember { mutableStateOf<List<FleetBounty>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        runCatching {
+            val w = Repo.workspaces()
+            wss = w
+            cards = Repo.myOpenCards()
+            inbox = Repo.inboxCounts().filter { it.waiting > 0 }
+            bounties = Repo.openBounties(w.map { it.first.id })
+        }.onFailure(onError)
+    }
+    val list = cards ?: run { SplashScreen(); return }
+    val wsById = wss.associateBy { it.first.id }
+    val grouped = list.groupBy { dueBucket(it.dueDate) }
+
+    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Text("🚢 Flotte", fontSize = 24.sp, fontWeight = FontWeight.Black)
+            Text("Alles für dich aus ${wss.size} Umgebungen.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+        }
+        if (inbox.isNotEmpty()) {
+            item { SectionTitle("📥 Wartet im Eingang") }
+            items(inbox) { c ->
+                val w = wsById[c.workspaceId] ?: return@items
+                ColorTile(w.first.name, w.first.color, "${c.waiting} Aufgabe${if (c.waiting == 1) "" else "n"} warten auf Annahme") { onOpenWorkspace(w.first, w.second) }
+            }
+        }
+        item { SectionTitle("✅ Meine Aufgaben  ${list.size}") }
+        if (list.isEmpty()) item { EmptyHint("Keine offenen Aufgaben. 🎉") }
+        DueBucket.entries.forEach { b ->
+            val l = grouped[b].orEmpty().sortedBy { it.dueDate ?: "9999" }
+            if (l.isNotEmpty()) {
+                item { Chip("${b.label} · ${l.size}", b.color, Modifier.padding(top = 4.dp)) }
+                items(l, key = { "c" + it.id }) { c ->
+                    Card(
+                        onClick = { onOpenCard(c) },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(c.title, fontWeight = FontWeight.SemiBold)
+                                val ws = c.projects?.workspaceId?.let { wsById[it]?.first?.name }
+                                Text(listOfNotNull(ws, c.projects?.name).joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            dueInfo(c.dueDate)?.let { (t, col) -> Chip(t, col) }
+                        }
+                    }
+                }
+            }
+        }
+        if (bounties.isNotEmpty()) {
+            item { SectionTitle("🪙 Offene Bounties & Hilfe") }
+            items(bounties, key = { "b" + it.id }) { b ->
+                val w = wsById[b.workspaceId]
+                Card(
+                    onClick = { w?.let { onOpenWorkspace(it.first, it.second) } },
+                    colors = CardDefaults.cardColors(containerColor = paletteColors("lemon").first.copy(alpha = 0.4f)),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (b.kind == "bounty" && b.rewardImage != null) RewardImage(b.rewardImage, Modifier.size(40.dp))
+                        else Text(if (b.kind == "bounty") "🪙" else "🤝", fontSize = 24.sp)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(b.title, fontWeight = FontWeight.SemiBold)
+                            Text(w?.first?.name ?: "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(t: String) {
+    Text(t, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 10.dp))
+}
+
+// ---------------------------------------------------------------- Meilensteine
+
+/** Meilensteine eines Projekts mit Fortschritt (erledigte zugeordnete Aufgaben). */
+@Composable
+fun MilestonesPanel(project: Project, onError: (Throwable) -> Unit) {
+    var milestones by remember { mutableStateOf<List<Milestone>?>(null) }
+    var cards by remember { mutableStateOf<List<MilestoneCard>>(emptyList()) }
+    var version by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(project.id, version) {
+        runCatching { milestones = Repo.milestones(project.id); cards = Repo.milestoneCards(project.id) }.onFailure(onError)
+    }
+    val list = milestones ?: run { SplashScreen(); return }
+    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (list.isEmpty()) item { EmptyHint("Dieses Projekt hat keine Meilensteine.") }
+        items(list, key = { it.id }) { m ->
+            val mine = cards.filter { it.milestoneId == m.id }
+            val done = mine.count { it.done }
+            val progress = if (m.done) 1f else if (mine.isEmpty()) 0f else done.toFloat() / mine.size
+            Card(
+                colors = CardDefaults.cardColors(containerColor = if (m.done) paletteColors("mint").first.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(start = 6.dp, end = 14.dp, top = 6.dp, bottom = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = m.done, onCheckedChange = { v ->
+                            scope.launch { runCatching { Repo.setMilestoneDone(m.id, v) }.onFailure(onError); version++ }
+                        })
+                        Column(Modifier.weight(1f)) {
+                            Text("🚩 ${m.title}", fontWeight = FontWeight.Bold)
+                            m.description?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
+                        dueInfo(m.dueDate)?.let { (t, c) -> Chip(t, if (m.done) "mint" else c) }
+                    }
+                    Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(50)),
+                            color = paletteColors(project.color).second,
+                            trackColor = paletteColors(project.color).first,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("$done/${mine.size}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Einstellungen
+
+private val AVATAR_COLORS = listOf("lavender", "mint", "peach", "sky", "lemon", "rose", "teal", "coral", "lilac", "lime", "ocean", "apricot", "berry", "pistachio")
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SettingsScreen(onError: (Throwable) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var profile by remember { mutableStateOf<Profile?>(null) }
+    var name by remember { mutableStateOf("") }
+    var initials by remember { mutableStateOf("") }
+    var bg by remember { mutableStateOf<String?>(null) }
+    var saved by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        runCatching {
+            val p = Repo.myProfile(); profile = p
+            name = p?.displayName.orEmpty(); initials = p?.initials.orEmpty(); bg = p?.initialsBg
+        }.onFailure(onError)
+    }
+    val p = profile ?: run { SplashScreen(); return }
+    val preview = p.copy(displayName = name, initials = initials.trim().uppercase().take(3).ifBlank { null }, initialsBg = bg, initialsInk = null)
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Avatar(preview, 56)
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text(preview.label, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(p.email, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                }
+            }
+        }
+        item {
+            OutlinedTextField(name, { name = it; saved = false }, label = { Text("Anzeigename") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        item {
+            OutlinedTextField(initials, { initials = it.take(3); saved = false }, label = { Text("Kürzel (max. 3)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        item {
+            Text("Avatarfarbe", fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AVATAR_COLORS.forEach { c ->
+                    Box(
+                        Modifier.size(36.dp).clip(CircleShape).background(paletteColors(c).first)
+                            .clickable { bg = c; saved = false },
+                        contentAlignment = Alignment.Center,
+                    ) { if (bg == c) Text("✓", color = paletteColors(c).second, fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+        item {
+            Button(enabled = name.isNotBlank() && !saved, onClick = {
+                scope.launch {
+                    runCatching { Repo.updateProfile(name, initials.trim().uppercase().take(3).ifBlank { null }, bg) }
+                        .onSuccess { saved = true }.onFailure(onError)
+                }
+            }, modifier = Modifier.fillMaxWidth()) { Text(if (saved) "Gespeichert ✓" else "Speichern") }
+        }
+        item { HorizontalDivider() }
+        item {
+            OutlinedButton(onClick = {
+                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+            }, modifier = Modifier.fillMaxWidth()) { Text("🔔 Benachrichtigungen einstellen") }
+        }
+        item {
+            OutlinedButton(onClick = { openWeb(context, "/profil") }, modifier = Modifier.fillMaxWidth()) { Text("Weitere Einstellungen im Web") }
+        }
+        item {
+            OutlinedButton(onClick = { scope.launch { AuthFlow.signOut() } }, modifier = Modifier.fillMaxWidth()) {
+                Text("Abmelden", color = MaterialTheme.colorScheme.error)
+            }
+        }
+        item {
+            Text(
+                "Kudoz für Android · Version ${BuildConfig.VERSION_NAME}",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+        }
+    }
+}

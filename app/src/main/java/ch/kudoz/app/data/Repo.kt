@@ -261,6 +261,69 @@ object Repo {
         })
     }
 
+    // ---------- Meilensteine ----------
+
+    suspend fun milestones(projectId: String): List<Milestone> =
+        db.from("milestones").select(Columns.raw("id, title, description, due_date, done, position")) {
+            filter { eq("project_id", projectId) }
+            order("position", Order.ASCENDING)
+        }.decodeList()
+
+    suspend fun milestoneCards(projectId: String): List<MilestoneCard> =
+        db.from("cards").select(Columns.raw("id, done, milestone_id")) {
+            filter { eq("project_id", projectId); filterNot("milestone_id", FilterOperator.IS, "null") }
+        }.decodeList()
+
+    suspend fun setMilestoneDone(id: String, done: Boolean) {
+        db.from("milestones").update({ set("done", done) }) { filter { eq("id", id) } }
+    }
+
+    // ---------- Aufgaben senden ----------
+
+    suspend fun transferTargets(sourceWs: String): List<TransferTarget> =
+        db.postgrest.rpc("transfer_targets", buildJsonObject { put("_source_ws", sourceWs) }).decodeList()
+
+    suspend fun transferSend(
+        sourceWs: String, card: Card, targetWs: String, title: String, description: String, message: String,
+        withChecklist: Boolean, withDue: Boolean, withComments: Boolean, keepMode: String, feedback: Boolean,
+    ) = rpc("transfer_send") {
+        put("_source_ws", sourceWs); put("_card", card.id); put("_target_ws", targetWs)
+        put("_title", title); put("_description", description); put("_message", message)
+        put("_with_checklist", withChecklist); put("_with_due", withDue); put("_with_comments", withComments)
+        put("_keep_mode", keepMode); put("_feedback", feedback && keepMode == "copy")
+        put("_project", kotlinx.serialization.json.JsonNull); put("_column", kotlinx.serialization.json.JsonNull)
+    }
+
+    // ---------- Flotte ----------
+
+    suspend fun inboxCounts(): List<InboxCount> =
+        runCatching { db.postgrest.rpc("my_inbox_counts").decodeList<InboxCount>() }.getOrDefault(emptyList())
+
+    suspend fun openBounties(workspaceIds: List<String>): List<FleetBounty> {
+        if (workspaceIds.isEmpty()) return emptyList()
+        return db.from("bounties").select(Columns.raw("id, title, kind, reward_image, workspace_id")) {
+            filter { isIn("workspace_id", workspaceIds); eq("status", "open") }
+            order("created_at", Order.DESCENDING)
+            limit(60)
+        }.decodeList()
+    }
+
+    // ---------- Profil ----------
+
+    suspend fun myProfile(): Profile? {
+        val uid = userId ?: return null
+        profileCache.remove(uid)
+        return profiles(listOf(uid))[uid]
+    }
+
+    suspend fun updateProfile(name: String, initials: String?, bg: String?) {
+        val uid = userId ?: return
+        db.from("profiles").update({
+            set("display_name", name.trim()); set("initials", initials); set("initials_bg", bg); set("initials_ink", null as String?)
+        }) { filter { eq("id", uid) } }
+        profileCache.remove(uid)
+    }
+
     private suspend fun rpc(name: String, args: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) {
         db.postgrest.rpc(name, buildJsonObject(args))
     }

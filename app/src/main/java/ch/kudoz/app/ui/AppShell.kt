@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -73,6 +75,9 @@ sealed interface Screen {
     data class CardDetail(val ws: Workspace, val project: Project, val cardId: String) : Screen
     data class Archive(val ws: Workspace, val project: Project) : Screen
     data object Treasury : Screen
+    data object Fleet : Screen
+    data object Settings : Screen
+    data class Milestones(val ws: Workspace, val project: Project) : Screen
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -141,7 +146,7 @@ fun AppShell() {
                 TopAppBar(
                     title = {
                         Text(
-                            when (top) { is Screen.Projects -> top.ws.name; Screen.Treasury -> "Schatzkammer"; else -> "Kudoz" },
+                            when (top) { is Screen.Projects -> top.ws.name; Screen.Treasury -> "Schatzkammer"; Screen.Fleet -> "Flotte"; Screen.Settings -> "Einstellungen"; is Screen.Milestones -> "Meilensteine · ${top.project.name}"; else -> "Kudoz" },
                             fontWeight = FontWeight.Black,
                         )
                     },
@@ -154,8 +159,8 @@ fun AppShell() {
                         if (top is Screen.Projects) IconButton(onClick = { openWeb(context, "/w/${top.ws.id}") }) {
                             Icon(Icons.Default.OpenInBrowser, "Im Web öffnen")
                         }
-                        if (top is Screen.Workspaces) IconButton(onClick = { scope.launch { AuthFlow.signOut() } }) {
-                            Icon(Icons.AutoMirrored.Filled.Logout, "Abmelden")
+                        if (top is Screen.Workspaces) IconButton(onClick = { push(Screen.Settings) }) {
+                            Icon(Icons.Default.Settings, "Einstellungen")
                         }
                     },
                 )
@@ -189,18 +194,26 @@ fun AppShell() {
             } else if (tab == 2) {
                 NotificationsScreen(onUnread = { unread = it }, onError = ::showError, onOpenLink = ::openLink)
             } else when (top) {
-                Screen.Workspaces -> WorkspacesScreen(onOpen = { ws, role -> push(Screen.Projects(ws, role)) }, onTreasury = { push(Screen.Treasury) }, onError = ::showError)
+                Screen.Workspaces -> WorkspacesScreen(onOpen = { ws, role -> push(Screen.Projects(ws, role)) }, onTreasury = { push(Screen.Treasury) }, onFleet = { push(Screen.Fleet) }, onError = ::showError)
                 is Screen.Projects -> WorkspaceScreen(top.ws, top.role, onOpenProject = { push(Screen.Board(top.ws, it)) }, onError = ::showError)
                 is Screen.Board -> BoardScreen(
                     top.ws, top.project,
                     onBack = { pop() },
                     onOpenCard = { push(Screen.CardDetail(top.ws, top.project, it)) },
                     onOpenArchive = { push(Screen.Archive(top.ws, top.project)) },
+                    onOpenMilestones = { push(Screen.Milestones(top.ws, top.project)) },
                     onError = ::showError,
                 )
                 is Screen.CardDetail -> CardDetailScreen(top.project, top.cardId, onBack = { pop() }, onError = ::showError)
                 is Screen.Archive -> ArchiveScreen(top.project, onBack = { pop() }, onError = ::showError)
                 Screen.Treasury -> TreasuryScreen(onError = ::showError)
+                Screen.Settings -> SettingsScreen(onError = ::showError)
+                is Screen.Milestones -> MilestonesPanel(top.project, onError = ::showError)
+                Screen.Fleet -> FleetScreen(
+                    onOpenCard = { c -> c.projects?.let { openCard(it.workspaceId, it.id, c.id) } },
+                    onOpenWorkspace = { ws, role -> stack.clear(); stack.add(Screen.Workspaces); stack.add(Screen.Projects(ws, role)) },
+                    onError = ::showError,
+                )
             }
         }
     }
@@ -264,7 +277,7 @@ fun ColorTile(name: String, color: String, sub: String?, onClick: () -> Unit) {
 private val ROLE = mapOf("admin" to "Admin", "kern" to "Kern", "leitung" to "Leitung", "gast" to "Gast")
 
 @Composable
-fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onTreasury: () -> Unit, onError: (Throwable) -> Unit) {
+fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onTreasury: () -> Unit, onFleet: () -> Unit, onError: (Throwable) -> Unit) {
     LoadingList(
         load = { Repo.workspaces() },
         onError = onError,
@@ -274,6 +287,9 @@ fun WorkspacesScreen(onOpen: (Workspace, String) -> Unit, onTreasury: () -> Unit
                 "Hallo ${Repo.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() } ?: ""} 👋",
                 fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp),
             )
+            ColorTile("Flotte", "ocean", "Alles für dich aus allen Umgebungen") { onFleet() }
+            Spacer(Modifier.height(4.dp))
+            Text("Umgebungen", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
         },
         footer = {
             androidx.compose.material3.TextButton(onClick = onTreasury, modifier = Modifier.fillMaxWidth()) {

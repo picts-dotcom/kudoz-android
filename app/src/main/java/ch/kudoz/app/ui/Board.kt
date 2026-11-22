@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInBrowser
@@ -85,6 +86,7 @@ fun BoardScreen(
     onBack: () -> Unit,
     onOpenCard: (String) -> Unit,
     onOpenArchive: () -> Unit,
+    onOpenMilestones: () -> Unit,
     onError: (Throwable) -> Unit,
 ) {
     var columns by remember { mutableStateOf<List<BoardColumn>?>(null) }
@@ -120,6 +122,7 @@ fun BoardScreen(
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
             actions = {
                 IconButton(onClick = { scope.launch { reload() } }) { Icon(Icons.Default.Refresh, "Neu laden") }
+                IconButton(onClick = onOpenMilestones) { Icon(Icons.Default.Flag, "Meilensteine") }
                 IconButton(onClick = onOpenArchive) { Icon(Icons.Default.Inventory2, "Archiv") }
                 IconButton(onClick = { openWeb(context, "/w/${ws.id}/p/${project.id}") }) {
                     Icon(Icons.Default.OpenInBrowser, "Im Web öffnen")

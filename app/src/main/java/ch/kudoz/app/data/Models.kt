@@ -246,3 +246,36 @@ data class ArchivedCard(
     @SerialName("done_at") val doneAt: String? = null,
     @SerialName("archived_at") val archivedAt: String? = null,
 )
+
+@Serializable
+data class Milestone(
+    val id: String,
+    val title: String,
+    val description: String? = null,
+    @SerialName("due_date") val dueDate: String? = null,
+    val done: Boolean = false,
+    val position: Double = 0.0,
+)
+
+@Serializable
+data class MilestoneCard(val id: String, val done: Boolean = false, @SerialName("milestone_id") val milestoneId: String? = null)
+
+@Serializable
+data class TransferTarget(
+    val id: String,
+    val name: String,
+    val color: String = "sky",
+    @SerialName("can_place") val canPlace: Boolean = false,
+)
+
+@Serializable
+data class InboxCount(@SerialName("workspace_id") val workspaceId: String, val waiting: Int)
+
+@Serializable
+data class FleetBounty(
+    val id: String,
+    val title: String,
+    val kind: String = "bounty",
+    @SerialName("reward_image") val rewardImage: Int? = null,
+    @SerialName("workspace_id") val workspaceId: String,
+)
